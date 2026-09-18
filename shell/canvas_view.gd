@@ -3,11 +3,10 @@ extends Node2D
 const Document := preload("res://core/model/document.gd")
 const Shape := preload("res://core/model/shape.gd")
 
-const DOC_WORLD_SIZE := Vector2(1240, 1754)
 const GRID_SPACING := 24.0
-const GRID_DOT_RADIUS := 1.4
-const BG_COLOR := Color("#3a3a3c")
-const SHEET_COLOR := Color("#ffffff")
+const GRID_DOT_RADIUS := 1.6
+const TILE_CELLS := 16
+const CANVAS_COLOR := Color("#ffffff")
 const GRID_COLOR := Color("#d9d9d9")
 const MIN_ZOOM := 0.2
 const MAX_ZOOM := 8.0
@@ -15,10 +14,10 @@ const MAX_ZOOM := 8.0
 var document: Document
 
 var _zoom := 1.0
-var _offset := Vector2.ZERO
+var _content_offset := Vector2.ZERO
 var _touches := {}
 var _gesture_dist := 0.0
-var _gesture_center := Vector2.ZERO
+var _grid_tex: ImageTexture
 
 
 func setup(doc: Document) -> void:
@@ -26,17 +25,26 @@ func setup(doc: Document) -> void:
 
 
 func _ready() -> void:
+	_grid_tex = _make_grid_texture()
+	_fit_to_document()
+
+
+func _fit_to_document() -> void:
 	var vp := get_viewport_rect()
-	_offset = (vp.size - DOC_WORLD_SIZE) * 0.5
+	if document == null or document.shapes.is_empty():
+		_content_offset = vp.size * 0.5
+		return
+	var bounds := document.shapes[0].get_selrect()
+	for s in document.shapes:
+		bounds = bounds.merge(s.get_selrect())
+	_content_offset = vp.size * 0.5 - bounds.get_center() * _zoom
 
 
 func _draw() -> void:
 	_draw_background()
-	draw_set_transform(_offset, 0.0, Vector2(_zoom, _zoom))
-	_draw_sheet()
 	if document == null:
-		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 		return
+	draw_set_transform(_content_offset, 0.0, Vector2(_zoom, _zoom))
 	for s in document.shapes:
 		_draw_shape(s)
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
@@ -44,19 +52,30 @@ func _draw() -> void:
 
 func _draw_background() -> void:
 	var vp := get_viewport_rect()
-	draw_rect(vp, BG_COLOR)
+	draw_rect(vp, CANVAS_COLOR)
+	var tile := GRID_SPACING * TILE_CELLS
+	var y := 0.0
+	while y < vp.size.y:
+		var x := 0.0
+		while x < vp.size.x:
+			draw_texture(_grid_tex, Vector2(x, y))
+			x += tile
+		y += tile
 
 
-func _draw_sheet() -> void:
-	draw_rect(Rect2(Vector2.ZERO, DOC_WORLD_SIZE), SHEET_COLOR)
-	var spacing := GRID_SPACING
-	var y := spacing * 0.5
-	while y < DOC_WORLD_SIZE.y:
-		var x := spacing * 0.5
-		while x < DOC_WORLD_SIZE.x:
-			draw_circle(Vector2(x, y), GRID_DOT_RADIUS, GRID_COLOR)
-			x += spacing
-		y += spacing
+func _make_grid_texture() -> ImageTexture:
+	var tile := int(GRID_SPACING) * TILE_CELLS
+	var img := Image.create(tile, tile, false, Image.FORMAT_RGBA8)
+	img.fill(Color(1, 1, 1, 0))
+	var ri := int(ceil(GRID_DOT_RADIUS))
+	for cy in range(TILE_CELLS):
+		for cx in range(TILE_CELLS):
+			var center := Vector2(GRID_SPACING * (float(cx) + 0.5), GRID_SPACING * (float(cy) + 0.5))
+			for dy in range(-ri, ri + 1):
+				for dx in range(-ri, ri + 1):
+					if dx * dx + dy * dy <= GRID_DOT_RADIUS * GRID_DOT_RADIUS:
+						img.set_pixel(int(center.x) + dx, int(center.y) + dy, GRID_COLOR)
+	return ImageTexture.create_from_image(img)
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -81,8 +100,7 @@ func _unhandled_input(event: InputEvent) -> void:
 				var center := (a + b) * 0.5
 				var dist := a.distance_to(b)
 				if dist > 0.0:
-					_apply_camera(center - _gesture_center, dist / _gesture_dist, center)
-					_gesture_center = center
+					_apply_zoom(dist / _gesture_dist, center)
 					_gesture_dist = dist
 
 
@@ -90,14 +108,13 @@ func _sync_baseline() -> void:
 	var pts: Array = _touches.values()
 	var a: Vector2 = pts[0]
 	var b: Vector2 = pts[1]
-	_gesture_center = (a + b) * 0.5
 	_gesture_dist = a.distance_to(b)
 
 
-func _apply_camera(delta: Vector2, factor: float, center: Vector2) -> void:
+func _apply_zoom(factor: float, center: Vector2) -> void:
 	var new_zoom := clampf(_zoom * factor, MIN_ZOOM, MAX_ZOOM)
-	var world_anchor := (center - _offset) / _zoom
-	_offset = center - world_anchor * new_zoom + delta
+	var world_anchor := (center - _content_offset) / _zoom
+	_content_offset = center - world_anchor * new_zoom
 	_zoom = new_zoom
 	queue_redraw()
 
