@@ -3,6 +3,11 @@ extends Node2D
 const Document := preload("res://core/model/document.gd")
 const Shape := preload("res://core/model/shape.gd")
 
+const GRID_SPACING := 24.0
+const GRID_DOT_RADIUS := 1.4
+const BG_COLOR := Color("#ffffff")
+const GRID_COLOR := Color("#d9d9d9")
+
 var document: Document
 
 
@@ -11,10 +16,24 @@ func setup(doc: Document) -> void:
 
 
 func _draw() -> void:
+	_draw_background()
 	if document == null:
 		return
 	for s in document.shapes:
 		_draw_shape(s)
+
+
+func _draw_background() -> void:
+	var vp := get_viewport_rect()
+	draw_rect(vp, BG_COLOR)
+	var spacing := GRID_SPACING
+	var y := vp.position.y + spacing * 0.5
+	while y < vp.end.y:
+		var x := vp.position.x + spacing * 0.5
+		while x < vp.end.x:
+			draw_circle(Vector2(x, y), GRID_DOT_RADIUS, GRID_COLOR)
+			x += spacing
+		y += spacing
 
 
 func _draw_shape(s: Shape) -> void:
