@@ -29,6 +29,14 @@ func _draw_shape(s: Shape) -> void:
 			_draw_ellipse(s)
 		Shape.Type.LINE:
 			draw_line(s.line_a, s.line_b, s.stroke, s.stroke_width)
+		Shape.Type.PATH:
+			var poly: PackedVector2Array = s.get_flattened_polyline()
+			if poly.size() >= 2:
+				if s.closed and poly.size() >= 3:
+					draw_colored_polygon(poly, s.fill)
+					draw_polyline(poly, s.stroke, s.stroke_width, true)
+				else:
+					draw_polyline(poly, s.stroke, s.stroke_width, false)
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 

@@ -26,11 +26,12 @@ App nativa de diseño UI/UX estilo Figma, 100% Android, open source, sin anuncio
 - [x] Proyecto Godot, renderer Mobile ✅ (2026-09-18)
 - [x] Estructura core/shell (core sin UI ni dependencias) ✅
 - [x] Core de figuras: rect, elipse, línea (matrices, bounds, hit-testing) ✅ (40 tests)
-- [ ] Core de path/vector editing (pluma) + boolean ops
+- [x] Core de path (pluma): nodos/beziers, parser/serializador SVG path, hit-test ✅ (93 tests)
 - [x] Sistema de comandos / undo (estilo Penpot changes-builder) ✅ (56 tests total)
-- [ ] Tests del core (portar specs de Penpot)
-- [ ] Export Android configurado (export templates + editor en máquina del dev)
-- [ ] Banco de stress (rects+paths, multitouch) → baseline FPS en ambos móviles
+- [x] Tests del core (portar specs de Penpot) ✅
+- [x] Export Android configurado (`export_presets.cfg`, arm64-v8a, `io.vektra.app`) — falta exportar APK con editor+templates en máquina del dev
+- [x] Banco de stress (`stress/` + `tests/stress_headless.gd`) → falta baseline FPS en ambos móviles
+- [ ] Boolean ops → movidas a Fase 2 (módulo más duro, no requiere el core base para construirse)
 
 ### Fase 1 — Canvas y edición básica (4–6 semanas)
 - [ ] Gestos propios: pan/zoom (pinch), selección tap/drag, marquee multi-selección
@@ -42,8 +43,8 @@ App nativa de diseño UI/UX estilo Figma, 100% Android, open source, sin anuncio
 - [ ] APK usable en ambos móviles
 
 ### Fase 2 — Vector y texto (6–8 semanas)
-- [ ] Tool pluma + edición de nodos/beziers
-- [ ] Boolean ops
+- [ ] Tool pluma + edición de nodos/beziers (interactiva sobre el core ya listo)
+- [ ] Boolean ops (intersect/union/difference XOR — portar de Penpot geom/shapes)
 - [ ] Texto (Godot TextServer: tipografía, alineación, wrap)
 - [ ] Reglas/guías
 - [ ] Auto-layout flex/grid (diferenciador)
@@ -61,19 +62,21 @@ App nativa de diseño UI/UX estilo Figma, 100% Android, open source, sin anuncio
 
 ## Etapa actual
 
-**Fase 0 avanzada — próximos pasos concretos:**
+**Fase 0 completa — próximos pasos concretos (Fase 1):**
 - [x] Proyecto Godot base (Mobile renderer) ✅
-- [x] Esqueleto `core/` + `tests/` + `shell/` ✅
+- [x] Esqueleto `core/` + `tests/` + `shell/` + `stress/` ✅
 - [x] Core figuras rect/elipse/línea (matriz, bounds, hit-test) + 40 tests ✅
 - [x] CI GitHub Actions verde (import + tests) ✅
 - [x] Sistema de comandos/undo (add/remove/move + redo/cap) ✅
-- [ ] Path de 4 nodos (pluma) en el core
-- [ ] Boolean ops
-- [ ] Export Android configurado
-- [ ] Banco de stress en los 2 móviles (baseline FPS)
+- [x] Path de 4 nodos en el core (beziers, hit-test, SVG d parse/serialize, selrect) + 93 tests ✅
+- [x] `export_presets.cfg` Android (arm64-v8a, `io.vektra.app`) ✅
+- [x] `stress/` (escena 200+200 shapes, FPS overlay) + `tests/stress_headless.gd` (baseline CPU) ✅
+- [ ] Baseline FPS real en los 2 móviles (export APK en máquina del dev e instalar)
+- [ ] Boolean ops (ahora en Fase 2)
 
 ## Recursos
 
 - Repo Penpot clonado: `/root/penpot` (lógica de dominio en `common/src/app/common/geom/` y `frontend/src/app/main/data/workspace/`)
 - Godot headless local: `/root/godot/godot`
 - Conclusión técnica validada en código: Vulkan min 1.0; features 1.1/1.2/1.3 se activan condicionalmente; PowerVR ya tiene workarounds en Godot
+- Baseline stress CPU local: 2000 shapes → serializar 106 ms, 2000 hit-tests 24 ms, cargar 240 ms (en proot emulado, más lento que en móvil)

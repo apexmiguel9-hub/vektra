@@ -27,6 +27,17 @@ static func line(a: Vector2, b: Vector2, p_name := "Line") -> Shape:
 	return s
 
 
+static func path(p_nodes: Array, p_closed := false, p_name := "Path") -> Shape:
+	var s := Shape.new(p_name)
+	s.type = Shape.Type.PATH
+	s.closed = p_closed
+	s.nodes.assign(p_nodes)
+	for nd in s.nodes:
+		if nd.c1 == Vector2.ZERO and nd.c2 == Vector2.ZERO:
+			nd.make_straight()
+	return s
+
+
 static func clone(src: Shape) -> Shape:
 	var s := Shape.new(src.name)
 	s.id = src.id

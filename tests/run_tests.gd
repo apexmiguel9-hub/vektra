@@ -3,6 +3,9 @@ extends SceneTree
 const Shape := preload("res://core/model/shape.gd")
 const ShapeFactory := preload("res://core/model/shape_factory.gd")
 const Document := preload("res://core/model/document.gd")
+const PathNode := preload("res://core/model/path_node.gd")
+const SvgPath := preload("res://core/geo/svg_path.gd")
+const Bezier := preload("res://core/geo/bezier.gd")
 const History := preload("res://core/history/history.gd")
 const AddShapeCommand := preload("res://core/history/add_shape_command.gd")
 const RemoveShapeCommand := preload("res://core/history/remove_shape_command.gd")
@@ -27,6 +30,16 @@ func _init() -> void:
 	_test_history_remove_index()
 	_test_history_redo_cleared()
 	_test_history_cap()
+	_test_bezier_cubic_mid()
+	_test_pip()
+	_test_svg_roundtrip_lines()
+	_test_svg_parse_curve()
+	_test_svg_parse_quad()
+	_test_svg_parse_smooth()
+	_test_path_hit_closed()
+	_test_path_hit_open()
+	_test_path_selrect()
+	_test_path_shape_roundtrip()
 	print("=== RESULTADO: %d passed, %d failed ===" % [_passed, _failed])
 	quit(0 if _failed == 0 else 1)
 
@@ -225,3 +238,102 @@ func _test_history_cap() -> void:
 	hist.undo()
 	_check("cap discards oldest", not hist.can_undo())
 	_check("cap leaves 1 shape", doc.shapes.size() == 1)
+
+
+func _test_bezier_cubic_mid() -> void:
+	var p := Bezier.cubic_point(Vector2(0, 0), Vector2(33, 0), Vector2(66, 100), Vector2(100, 100), 0.5)
+	_check("cubic mid x", _approx(p.x, 49.625))
+	_check("cubic mid y", _approx(p.y, 50.0))
+
+
+func _test_pip() -> void:
+	var tri := PackedVector2Array([Vector2(0, 0), Vector2(100, 0), Vector2(100, 100)])
+	_check("pip inside", Bezier.point_in_polygon(Vector2(50, 30), tri))
+	_check("pip outside right", not Bezier.point_in_polygon(Vector2(150, 30), tri))
+	_check("pip outside left", not Bezier.point_in_polygon(Vector2(0, 90), tri))
+
+
+func _test_svg_roundtrip_lines() -> void:
+	var parsed: Dictionary = SvgPath.nodes_from_svg_path_data("M 0 0 L 100 0 L 100 100 Z")
+	var nodes: Array = parsed["nodes"]
+	_check("svg nodes count", nodes.size() == 3)
+	_check("svg closed", parsed["closed"] == true)
+	_check("svg n0", _vec2_approx(nodes[0].position, Vector2.ZERO))
+	_check("svg n1", _vec2_approx(nodes[1].position, Vector2(100, 0)))
+	_check("svg n2", _vec2_approx(nodes[2].position, Vector2(100, 100)))
+	_check("svg serialized", SvgPath.path_to_svg_data(nodes, parsed["closed"]) == "M 0 0 L 100 0 L 100 100 Z")
+
+
+func _test_svg_parse_curve() -> void:
+	var parsed: Dictionary = SvgPath.nodes_from_svg_path_data("M 0 0 C 33 0 66 100 100 100")
+	var nodes: Array = parsed["nodes"]
+	_check("curve nodes", nodes.size() == 2)
+	_check("curve prev c2", _vec2_approx(nodes[0].c2, Vector2(33, 0)))
+	_check("curve cur c1", _vec2_approx(nodes[1].c1, Vector2(66, 100)))
+	_check("curve cur pos", _vec2_approx(nodes[1].position, Vector2(100, 100)))
+	_check("curve serialized", SvgPath.path_to_svg_data(nodes, false) == "M 0 0 C 33 0 66 100 100 100")
+
+
+func _test_svg_parse_quad() -> void:
+	var parsed: Dictionary = SvgPath.nodes_from_svg_path_data("M 0 0 Q 50 0 100 0")
+	var nodes: Array = parsed["nodes"]
+	_check("quad prev c2", _vec2_approx(nodes[0].c2, Vector2(33.333, 0), 0.01))
+	_check("quad cur c1", _vec2_approx(nodes[1].c1, Vector2(66.667, 0), 0.01))
+
+
+func _test_svg_parse_smooth() -> void:
+	var parsed: Dictionary = SvgPath.nodes_from_svg_path_data("M 0 0 C 33 0 66 100 100 100 S 133 100 200 0")
+	var nodes: Array = parsed["nodes"]
+	_check("smooth nodes", nodes.size() == 3)
+	_check("smooth reflection c2", _vec2_approx(nodes[1].c2, Vector2(134, 100), 0.01))
+	_check("smooth cur c1", _vec2_approx(nodes[2].c1, Vector2(133, 100), 0.01))
+	_check("smooth cur pos", _vec2_approx(nodes[2].position, Vector2(200, 0), 0.01))
+
+
+func _test_path_hit_closed() -> void:
+	var p := ShapeFactory.path([
+		PathNode.new(Vector2(0, 0)),
+		PathNode.new(Vector2(100, 0)),
+		PathNode.new(Vector2(100, 100)),
+	], true)
+	_check("path inside", p.contains_point(Vector2(50, 30)))
+	_check("path outside", not p.contains_point(Vector2(150, 30)))
+	_check("path border within threshold", p.contains_point(Vector2(101.5, 50), 2.0))
+	_check("path border beyond threshold", not p.contains_point(Vector2(103, 50), 2.0))
+
+
+func _test_path_hit_open() -> void:
+	var p := ShapeFactory.path([PathNode.new(Vector2(0, 0)), PathNode.new(Vector2(100, 0))])
+	p.stroke_width = 2.0
+	_check("open on", p.contains_point(Vector2(50, 0)))
+	_check("open within stroke", p.contains_point(Vector2(50, 1)))
+	_check("open beyond stroke", not p.contains_point(Vector2(50, 3)))
+
+
+func _test_path_selrect() -> void:
+	var p := ShapeFactory.path([
+		PathNode.new(Vector2(0, 0)),
+		PathNode.new(Vector2(100, 0), Vector2.ZERO, Vector2(0, -40)),
+		PathNode.new(Vector2(100, 100)),
+	], true)
+	var sr := p.get_selrect()
+	_check("path bbox top", _approx(sr.position.y, -40.0))
+	_check("path bbox height", _approx(sr.size.y, 140.0))
+	_check("path bbox width", _approx(sr.size.x, 100.0))
+
+
+func _test_path_shape_roundtrip() -> void:
+	var p := ShapeFactory.path([
+		PathNode.new(Vector2(0, 0)),
+		PathNode.new(Vector2(100, 0)),
+		PathNode.new(Vector2(100, 100)),
+	], true)
+	p.fill = Color("#ff3366")
+	var d := p.to_dict()
+	var p2 := Shape.new()
+	p2.load_from_dict(d)
+	_check("path roundtrip type", p2.type == Shape.Type.PATH)
+	_check("path roundtrip closed", p2.closed)
+	_check("path roundtrip nodes", p2.nodes.size() == 3)
+	_check("path roundtrip fill", p2.fill == Color("#ff3366"))
+	_check("path roundtrip hit", p2.contains_point(Vector2(50, 30)))

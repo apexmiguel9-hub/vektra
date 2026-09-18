@@ -1,6 +1,10 @@
 extends RefCounted
 
-enum Type { RECT, ELLIPSE, LINE }
+const PathNode := preload("res://core/model/path_node.gd")
+const SvgPath := preload("res://core/geo/svg_path.gd")
+const Bezier := preload("res://core/geo/bezier.gd")
+
+enum Type { RECT, ELLIPSE, LINE, PATH }
 
 var id := ""
 var name := ""
@@ -14,6 +18,9 @@ var size := Vector2.ZERO
 
 var line_a := Vector2.ZERO
 var line_b := Vector2.ZERO
+
+var nodes: Array[PathNode] = []
+var closed := false
 
 var fill := Color(1, 1, 1, 1)
 var stroke := Color(0, 0, 0, 1)
@@ -56,6 +63,20 @@ func get_corners() -> PackedVector2Array:
 func get_selrect() -> Rect2:
 	if type == Type.LINE:
 		return Rect2(line_a, line_b - line_a).abs()
+	if type == Type.PATH:
+		if nodes.is_empty():
+			return Rect2(position, Vector2.ZERO)
+		var pts := PackedVector2Array()
+		for nd in nodes:
+			pts.append(nd.position)
+			pts.append(nd.c1)
+			pts.append(nd.c2)
+		var minp := pts[0]
+		var maxp := pts[0]
+		for i in range(1, pts.size()):
+			minp = minp.min(pts[i])
+			maxp = maxp.max(pts[i])
+		return Rect2(minp, maxp - minp)
 	var pts := get_corners()
 	var minp := pts[0]
 	var maxp := pts[0]
@@ -83,10 +104,44 @@ func contains_point(p: Vector2, threshold := 2.0) -> bool:
 	if type == Type.LINE:
 		var closest := Geometry2D.get_closest_point_to_segment(p, line_a, line_b)
 		return p.distance_to(closest) <= maxf(threshold, stroke_width * 0.5)
+	if type == Type.PATH:
+		var t := maxf(threshold, stroke_width * 0.5)
+		if nodes.size() < 2:
+			return false
+		var poly := get_flattened_polyline()
+		if closed:
+			return Bezier.point_in_polygon(p, poly) or Bezier.distance_to_polyline(p, poly) <= t
+		return Bezier.distance_to_polyline(p, poly) <= t
 	var local := get_transform().affine_inverse() * p
 	if _is_inside_local(local):
 		return true
 	return _border_distance(local) <= maxf(threshold, stroke_width * 0.5)
+
+
+func get_flattened_polyline(steps := 10) -> PackedVector2Array:
+	var pts := PackedVector2Array()
+	if nodes.is_empty():
+		return pts
+	var n := nodes.size()
+	var count := n if closed else n - 1
+	if count <= 0:
+		return pts
+	for i in range(count):
+		var a: PathNode = nodes[i]
+		var b: PathNode = nodes[(i + 1) % n]
+		_append_flattened(pts, a.position)
+		if SvgPath.segments_are_curved(a, b):
+			for k in range(1, steps):
+				var tt := float(k) / float(steps)
+				_append_flattened(pts, Bezier.cubic_point(a.position, a.c2, b.c1, b.position, tt))
+		_append_flattened(pts, b.position)
+	return pts
+
+
+func _append_flattened(pts: PackedVector2Array, pt: Vector2) -> void:
+	if not pts.is_empty() and pts[pts.size() - 1] == pt:
+		return
+	pts.append(pt)
 
 
 func to_dict() -> Dictionary:
@@ -106,6 +161,8 @@ func to_dict() -> Dictionary:
 		"fill": "#" + fill.to_html(),
 		"stroke": "#" + stroke.to_html(),
 		"stroke_width": stroke_width,
+		"closed": closed,
+		"d": SvgPath.path_to_svg_data(nodes, closed),
 	}
 
 
@@ -124,6 +181,12 @@ func load_from_dict(d: Dictionary) -> void:
 	fill = Color(d.get("fill", "#ffffff"))
 	stroke = Color(d.get("stroke", "#000000"))
 	stroke_width = d.get("stroke_width", 2.0)
+	closed = d.get("closed", false)
+	if type == Type.PATH:
+		var parsed: Dictionary = SvgPath.nodes_from_svg_path_data(d.get("d", ""))
+		nodes.clear()
+		nodes.assign(parsed["nodes"])
+		closed = parsed["closed"]
 
 
 func _is_inside_local(local: Vector2) -> bool:
@@ -160,5 +223,7 @@ static func _type_from_string(t: String) -> int:
 			return Type.ELLIPSE
 		"line":
 			return Type.LINE
+		"path":
+			return Type.PATH
 		_:
 			return Type.RECT
