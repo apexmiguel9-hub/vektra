@@ -47,8 +47,8 @@ func _unhandled_input(event: InputEvent) -> void:
 
 func _fill(n: int) -> void:
 	for i in range(n):
-		var x := randf_range(40.0, 1040.0)
-		var y := randf_range(80.0, 1840.0)
+		var x := randf_range(40.0, 1200.0)
+		var y := randf_range(80.0, 1660.0)
 		var r := randf_range(12.0, 90.0)
 		match randi() % 4:
 			0:
