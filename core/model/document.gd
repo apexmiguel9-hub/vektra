@@ -11,6 +11,15 @@ func add(shape: Shape) -> void:
 	shapes.append(shape)
 
 
+func add_at(shape: Shape, index: int) -> void:
+	index = clampi(index, 0, shapes.size())
+	shapes.insert(index, shape)
+
+
+func get_index(shape_id: String) -> int:
+	return _index_of(shape_id)
+
+
 func remove(shape_id: String) -> bool:
 	var i := _index_of(shape_id)
 	if i == -1:

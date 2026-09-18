@@ -27,7 +27,7 @@ App nativa de diseño UI/UX estilo Figma, 100% Android, open source, sin anuncio
 - [x] Estructura core/shell (core sin UI ni dependencias) ✅
 - [x] Core de figuras: rect, elipse, línea (matrices, bounds, hit-testing) ✅ (40 tests)
 - [ ] Core de path/vector editing (pluma) + boolean ops
-- [ ] Sistema de comandos / undo (estilo Penpot changes-builder)
+- [x] Sistema de comandos / undo (estilo Penpot changes-builder) ✅ (56 tests total)
 - [ ] Tests del core (portar specs de Penpot)
 - [ ] Export Android configurado (export templates + editor en máquina del dev)
 - [ ] Banco de stress (rects+paths, multitouch) → baseline FPS en ambos móviles
@@ -66,8 +66,9 @@ App nativa de diseño UI/UX estilo Figma, 100% Android, open source, sin anuncio
 - [x] Esqueleto `core/` + `tests/` + `shell/` ✅
 - [x] Core figuras rect/elipse/línea (matriz, bounds, hit-test) + 40 tests ✅
 - [x] CI GitHub Actions verde (import + tests) ✅
-- [ ] Sistema de comandos/undo
+- [x] Sistema de comandos/undo (add/remove/move + redo/cap) ✅
 - [ ] Path de 4 nodos (pluma) en el core
+- [ ] Boolean ops
 - [ ] Export Android configurado
 - [ ] Banco de stress en los 2 móviles (baseline FPS)
 

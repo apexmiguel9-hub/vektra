@@ -3,6 +3,10 @@ extends SceneTree
 const Shape := preload("res://core/model/shape.gd")
 const ShapeFactory := preload("res://core/model/shape_factory.gd")
 const Document := preload("res://core/model/document.gd")
+const History := preload("res://core/history/history.gd")
+const AddShapeCommand := preload("res://core/history/add_shape_command.gd")
+const RemoveShapeCommand := preload("res://core/history/remove_shape_command.gd")
+const MoveShapeCommand := preload("res://core/history/move_shape_command.gd")
 
 var _passed := 0
 var _failed := 0
@@ -18,6 +22,11 @@ func _init() -> void:
 	_test_serialization_roundtrip()
 	_test_clone()
 	_test_marquee()
+	_test_history_add()
+	_test_history_move()
+	_test_history_remove_index()
+	_test_history_redo_cleared()
+	_test_history_cap()
 	print("=== RESULTADO: %d passed, %d failed ===" % [_passed, _failed])
 	quit(0 if _failed == 0 else 1)
 
@@ -150,3 +159,69 @@ func _test_marquee() -> void:
 	var hit := doc.hit_test_all(Rect2(0, 0, 100, 100))
 	_check("marquee selects one", hit.size() == 1)
 	_check("marquee picks A", hit[0] == a)
+
+
+func _test_history_add() -> void:
+	var doc := Document.new()
+	var hist := History.new()
+	var r := ShapeFactory.rect(Vector2.ZERO, 50.0, 50.0)
+	hist.push(AddShapeCommand.new(doc, r))
+	_check("add command applied", doc.shapes.size() == 1)
+	hist.undo()
+	_check("add command undone", doc.shapes.is_empty())
+	hist.redo()
+	_check("add command redone", doc.shapes.size() == 1)
+	_check("redo stack clean", not hist.can_redo())
+
+
+func _test_history_move() -> void:
+	var doc := Document.new()
+	var hist := History.new()
+	var m := ShapeFactory.rect(Vector2(10, 10), 50.0, 50.0)
+	doc.add(m)
+	hist.push(MoveShapeCommand.new(m, m.position, Vector2(100, 50)))
+	_check("move applied", _vec2_approx(m.position, Vector2(100, 50)))
+	hist.undo()
+	_check("move undone", _vec2_approx(m.position, Vector2(10, 10)))
+	hist.redo()
+	_check("move redone", _vec2_approx(m.position, Vector2(100, 50)))
+
+
+func _test_history_remove_index() -> void:
+	var doc := Document.new()
+	var hist := History.new()
+	var a := ShapeFactory.rect(Vector2(0, 0), 10.0, 10.0)
+	var b := ShapeFactory.rect(Vector2(20, 20), 10.0, 10.0)
+	doc.add(a)
+	doc.add(b)
+	hist.push(RemoveShapeCommand.new(doc, a))
+	_check("remove applied", doc.get_shape(a.id) == null)
+	hist.undo()
+	_check("remove undone count", doc.shapes.size() == 2)
+	_check("remove undone preserves index", doc.shapes[0] == a)
+	hist.redo()
+	_check("remove redone", doc.get_shape(a.id) == null)
+
+
+func _test_history_redo_cleared() -> void:
+	var doc := Document.new()
+	var hist := History.new()
+	var r := ShapeFactory.rect(Vector2.ZERO, 10.0, 10.0)
+	hist.push(AddShapeCommand.new(doc, r))
+	hist.undo()
+	_check("can redo before new push", hist.can_redo())
+	hist.push(AddShapeCommand.new(doc, ShapeFactory.rect(Vector2(50, 50), 10.0, 10.0)))
+	_check("redo cleared by new push", not hist.can_redo())
+
+
+func _test_history_cap() -> void:
+	var doc := Document.new()
+	var hist := History.new()
+	hist.max_undo = 2
+	for i in range(3):
+		hist.push(AddShapeCommand.new(doc, ShapeFactory.rect(Vector2(i * 10, 0), 5.0, 5.0)))
+	_check("doc has 3 shapes", doc.shapes.size() == 3)
+	hist.undo()
+	hist.undo()
+	_check("cap discards oldest", not hist.can_undo())
+	_check("cap leaves 1 shape", doc.shapes.size() == 1)
