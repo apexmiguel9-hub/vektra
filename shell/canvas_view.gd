@@ -44,10 +44,10 @@ func _draw() -> void:
 	_draw_background()
 	if document == null:
 		return
-	draw_set_transform(_content_offset, 0.0, Vector2(_zoom, _zoom))
+	var content := Transform2D(0.0, Vector2(_zoom, _zoom), 0.0, _content_offset)
 	for s in document.shapes:
-		_draw_shape(s)
-	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+		_draw_shape(s, content)
+	draw_set_transform_matrix(Transform2D.IDENTITY)
 
 
 func _draw_background() -> void:
@@ -119,19 +119,21 @@ func _apply_zoom(factor: float, center: Vector2) -> void:
 	queue_redraw()
 
 
-func _draw_shape(s: Shape) -> void:
+func _draw_shape(s: Shape, content: Transform2D) -> void:
 	if not s.visible:
 		return
 	match s.type:
 		Shape.Type.RECT:
-			draw_set_transform(s.position, deg_to_rad(s.rotation_deg), s.scale)
+			draw_set_transform_matrix(content * Transform2D(deg_to_rad(s.rotation_deg), s.scale, 0.0, s.position))
 			draw_rect(Rect2(-s.size * 0.5, s.size), s.fill)
 			draw_rect(Rect2(-s.size * 0.5, s.size), s.stroke, false, s.stroke_width)
 		Shape.Type.ELLIPSE:
-			_draw_ellipse(s)
+			_draw_ellipse(s, content)
 		Shape.Type.LINE:
+			draw_set_transform_matrix(content)
 			draw_line(s.line_a, s.line_b, s.stroke, s.stroke_width)
 		Shape.Type.PATH:
+			draw_set_transform_matrix(content)
 			var poly: PackedVector2Array = s.get_flattened_polyline()
 			if poly.size() >= 2:
 				if s.closed and poly.size() >= 3:
@@ -139,17 +141,15 @@ func _draw_shape(s: Shape) -> void:
 					draw_polyline(poly, s.stroke, s.stroke_width, true)
 				else:
 					draw_polyline(poly, s.stroke, s.stroke_width, false)
-	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 
-func _draw_ellipse(s: Shape) -> void:
+func _draw_ellipse(s: Shape, content: Transform2D) -> void:
 	var steps := 64
 	var r := s.size * 0.5
 	var pts := PackedVector2Array()
 	for i in range(steps):
 		var ang := TAU * float(i) / float(steps)
 		pts.append(Vector2(cos(ang) * r.x, sin(ang) * r.y))
-	draw_set_transform(s.position, deg_to_rad(s.rotation_deg), s.scale)
+	draw_set_transform_matrix(content * Transform2D(deg_to_rad(s.rotation_deg), s.scale, 0.0, s.position))
 	draw_colored_polygon(pts, s.fill)
 	draw_polyline(pts, s.stroke, s.stroke_width, true)
-	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
