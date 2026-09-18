@@ -25,3 +25,30 @@ jobs:
 
       - name: Run core tests
         run: godot --headless -s res://tests/run_tests.gd
+
+  apk:
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Godot with export templates
+        uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.7.2
+          include-templates: true
+
+      - name: Import assets
+        run: godot --headless --import
+
+      - name: Export debug APK (arm64-v8a)
+        run: |
+          mkdir -p build
+          godot --headless --export-debug "Android" build/vektra.apk
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: vektra-debug-apk
+          path: build/vektra.apk
