@@ -12,7 +12,8 @@ const TILE_CELLS := 16
 const MIN_PINCH_DIST := 24.0
 const TAP_SLOP := 12.0
 const FAT_FINGER_PX := 14.0
-const HANDLE_RADIUS := 6.0
+const HANDLE_RADIUS := 9.0
+const HANDLE_STROKE := 3.0
 const HANDLE_HIT_PX := 24.0
 const MIN_SELRECT_PX := 10.0
 const SELECTION_STROKE := 2.0
@@ -343,7 +344,7 @@ func _handle_positions(sr: Rect2) -> Array[Vector2]:
 
 
 func _begin_resize(edge: int) -> void:
-	var sr := _selected[0].get_selrect()
+	var sr := _min_visible_rect(_selected[0])
 	_resize_start_rect = sr
 	_resize_edge = edge
 	_resize_anchor = _anchor_for_edge(sr, edge)
@@ -428,7 +429,8 @@ func _draw_handles(s: Shape) -> void:
 	for i in range(pts.size()):
 		if not _handle_visible(i, real):
 			continue
-		draw_arc(pts[i], HANDLE_RADIUS, 0.0, TAU, 24, SELECTION_COLOR, SELECTION_STROKE)
+		draw_circle(pts[i], HANDLE_RADIUS, Color.WHITE)
+		draw_arc(pts[i], HANDLE_RADIUS, 0.0, TAU, 24, SELECTION_COLOR, HANDLE_STROKE)
 
 
 func _sync_baseline() -> void:
