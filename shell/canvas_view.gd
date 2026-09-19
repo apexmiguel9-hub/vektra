@@ -6,6 +6,7 @@ const Shape := preload("res://core/model/shape.gd")
 const GRID_SPACING := 24.0
 const GRID_DOT_RADIUS := 1.6
 const TILE_CELLS := 16
+const MIN_PINCH_DIST := 24.0
 const CANVAS_COLOR := Color("#ffffff")
 const GRID_COLOR := Color("#d9d9d9")
 const MIN_ZOOM := 0.2
@@ -17,6 +18,8 @@ var _zoom := 1.0
 var _content_offset := Vector2.ZERO
 var _touches := {}
 var _gesture_dist := 0.0
+var _gesture_center := Vector2.ZERO
+var _pinch_armed := false
 var _grid_tex: ImageTexture
 
 
@@ -100,21 +103,28 @@ func _unhandled_input(event: InputEvent) -> void:
 				var center := (a + b) * 0.5
 				var dist := a.distance_to(b)
 				if dist > 0.0:
-					_apply_zoom(dist / _gesture_dist, center)
+					var factor := 1.0
+					if _pinch_armed and dist >= MIN_PINCH_DIST:
+						factor = dist / _gesture_dist
+					_apply_camera(center - _gesture_center, factor, center)
+					_gesture_center = center
 					_gesture_dist = dist
+					_pinch_armed = _pinch_armed or dist >= MIN_PINCH_DIST
 
 
 func _sync_baseline() -> void:
 	var pts: Array = _touches.values()
 	var a: Vector2 = pts[0]
 	var b: Vector2 = pts[1]
+	_gesture_center = (a + b) * 0.5
 	_gesture_dist = a.distance_to(b)
+	_pinch_armed = _gesture_dist >= MIN_PINCH_DIST
 
 
-func _apply_zoom(factor: float, center: Vector2) -> void:
+func _apply_camera(delta: Vector2, factor: float, center: Vector2) -> void:
 	var new_zoom := clampf(_zoom * factor, MIN_ZOOM, MAX_ZOOM)
 	var world_anchor := (center - _content_offset) / _zoom
-	_content_offset = center - world_anchor * new_zoom
+	_content_offset = center - world_anchor * new_zoom + delta
 	_zoom = new_zoom
 	queue_redraw()
 

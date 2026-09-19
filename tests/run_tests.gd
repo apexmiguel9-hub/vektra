@@ -10,6 +10,7 @@ const History := preload("res://core/history/history.gd")
 const AddShapeCommand := preload("res://core/history/add_shape_command.gd")
 const RemoveShapeCommand := preload("res://core/history/remove_shape_command.gd")
 const MoveShapeCommand := preload("res://core/history/move_shape_command.gd")
+const CanvasView := preload("res://shell/canvas_view.gd")
 
 var _passed := 0
 var _failed := 0
@@ -40,6 +41,7 @@ func _init() -> void:
 	_test_path_hit_open()
 	_test_path_selrect()
 	_test_path_shape_roundtrip()
+	_test_camera_pan_zoom()
 	print("=== RESULTADO: %d passed, %d failed ===" % [_passed, _failed])
 	quit(0 if _failed == 0 else 1)
 
@@ -337,3 +339,25 @@ func _test_path_shape_roundtrip() -> void:
 	_check("path roundtrip nodes", p2.nodes.size() == 3)
 	_check("path roundtrip fill", p2.fill == Color("#ff3366"))
 	_check("path roundtrip hit", p2.contains_point(Vector2(50, 30)))
+
+
+func _test_camera_pan_zoom() -> void:
+	var cv := CanvasView.new()
+	cv._zoom = 1.0
+	cv._content_offset = Vector2(100, 200)
+	var center := Vector2(300, 400)
+	cv._apply_camera(Vector2.ZERO, 2.0, center)
+	var world := (center - cv._content_offset) / cv._zoom
+	_check("cam zoom applied", _approx(cv._zoom, 2.0))
+	_check("cam anchor stays on center", _vec2_approx(world, Vector2(200, 200)))
+	var before := cv._content_offset
+	cv._apply_camera(Vector2(10, -5), 1.0, center)
+	var moved := cv._content_offset - before
+	_check("cam pan translates by delta", _vec2_approx(moved, Vector2(10, -5)))
+	var zoomed := cv._zoom
+	cv._apply_camera(Vector2.ZERO, 100.0, center)
+	_check("cam clamps max zoom", _approx(cv._zoom, 8.0))
+	cv._apply_camera(Vector2.ZERO, 0.0001, center)
+	_check("cam clamps min zoom", _approx(cv._zoom, 0.2))
+	_check("cam zoom unchanged when maxed", _approx(zoomed, 2.0))
+	cv.free()
