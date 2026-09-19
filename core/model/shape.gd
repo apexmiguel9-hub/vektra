@@ -62,7 +62,7 @@ func get_corners() -> PackedVector2Array:
 
 func get_selrect() -> Rect2:
 	if type == Type.LINE:
-		return Rect2(line_a, line_b - line_a).abs()
+		return Rect2(line_a, line_b - line_a).abs().grow(stroke_width * 0.5)
 	if type == Type.PATH:
 		if nodes.is_empty():
 			return Rect2(position, Vector2.ZERO)

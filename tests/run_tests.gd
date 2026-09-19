@@ -45,6 +45,7 @@ func _init() -> void:
 	_test_selection_tap_and_drag()
 	_test_selection_empty_tap_deselects()
 	_test_marquee_selects()
+	_test_line_selectable()
 	print("=== RESULTADO: %d passed, %d failed ===" % [_passed, _failed])
 	quit(0 if _failed == 0 else 1)
 
@@ -119,7 +120,7 @@ func _test_line_hit() -> void:
 	_check("line within stroke", l.contains_point(Vector2(50, 1.5)))
 	_check("line beyond stroke", not l.contains_point(Vector2(50, 3.0)))
 	_check("line outside span", not l.contains_point(Vector2(120, 0)))
-	_check("line bounds", _rect2_approx(l.get_selrect(), Rect2(0, 0, 100, 0)))
+	_check("line bounds", _rect2_approx(l.get_selrect(), Rect2(-2, -2, 104, 4)))
 
 
 func _test_document_zorder() -> void:
@@ -420,4 +421,21 @@ func _test_marquee_selects() -> void:
 	cv._handle_drag(Vector2(400, 400))
 	cv._end_press()
 	_check("marquee selects both", cv._selected.size() == 2)
+	cv.free()
+
+
+func _test_line_selectable() -> void:
+	var doc := Document.new()
+	var l := ShapeFactory.line(Vector2(0, 0), Vector2(400, 0), "l")
+	l.stroke_width = 3.0
+	doc.add(l)
+	var cv := CanvasView.new()
+	cv._zoom = 1.0
+	cv._content_offset = Vector2.ZERO
+	cv.setup(doc)
+	cv._start_press(Vector2(200, 8))
+	_check("line grabs within fat finger", cv._selected.size() == 1 and cv._selected[0] == l)
+	cv._start_press(Vector2(200, 40))
+	cv._end_press()
+	_check("line missed far away", cv._selected.is_empty())
 	cv.free()

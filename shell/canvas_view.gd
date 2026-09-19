@@ -10,6 +10,7 @@ const GRID_DOT_RADIUS := 1.6
 const TILE_CELLS := 16
 const MIN_PINCH_DIST := 24.0
 const TAP_SLOP := 12.0
+const FAT_FINGER_PX := 14.0
 const CANVAS_COLOR := Color("#ffffff")
 const GRID_COLOR := Color("#d9d9d9")
 const SELECTION_COLOR := Color("#335dff")
@@ -266,7 +267,7 @@ func _commit_move() -> void:
 
 
 func _hit_test(world: Vector2) -> Shape:
-	return document.hit_test(world, 2.0)
+	return document.hit_test(world, maxf(2.0, FAT_FINGER_PX / _zoom))
 
 
 func _sync_baseline() -> void:
