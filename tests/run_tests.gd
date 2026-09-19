@@ -42,6 +42,9 @@ func _init() -> void:
 	_test_path_selrect()
 	_test_path_shape_roundtrip()
 	_test_camera_pan_zoom()
+	_test_selection_tap_and_drag()
+	_test_selection_empty_tap_deselects()
+	_test_marquee_selects()
 	print("=== RESULTADO: %d passed, %d failed ===" % [_passed, _failed])
 	quit(0 if _failed == 0 else 1)
 
@@ -360,4 +363,61 @@ func _test_camera_pan_zoom() -> void:
 	cv._apply_camera(Vector2.ZERO, 0.0001, center)
 	_check("cam clamps min zoom", _approx(cv._zoom, 0.2))
 	_check("cam zoom unchanged when maxed", _approx(zoomed, 2.0))
+	cv.free()
+
+
+func _test_selection_tap_and_drag() -> void:
+	var doc := Document.new()
+	var r := ShapeFactory.rect(Vector2(100, 100), 50, 50, "r")
+	doc.add(r)
+	var cv := CanvasView.new()
+	cv._zoom = 1.0
+	cv._content_offset = Vector2.ZERO
+	cv.setup(doc)
+	cv._start_press(Vector2(100, 100))
+	_check("tap selects shape", cv._selected.size() == 1 and cv._selected[0] == r)
+	cv._end_press()
+	_check("tap keeps selection", cv._selected.size() == 1)
+	cv._start_press(Vector2(100, 100))
+	cv._handle_drag(Vector2(160, 100))
+	_check("drag moves shape", _vec2_approx(r.position, Vector2(160, 100)))
+	cv._end_press()
+	_check("drag not active after release", cv._drag_mode == 0)
+	cv.free()
+
+
+func _test_selection_empty_tap_deselects() -> void:
+	var doc := Document.new()
+	var r := ShapeFactory.rect(Vector2(400, 400), 60, 60, "r")
+	doc.add(r)
+	var cv := CanvasView.new()
+	cv._zoom = 1.0
+	cv._content_offset = Vector2.ZERO
+	cv.setup(doc)
+	cv._start_press(Vector2(400, 400))
+	_check("press selects rect", cv._selected.size() == 1)
+	cv._start_press(Vector2(12, 12))
+	cv._end_press()
+	_check("tap empty deselects", cv._selected.is_empty())
+	cv.free()
+
+
+func _test_marquee_selects() -> void:
+	var doc := Document.new()
+	var a := ShapeFactory.rect(Vector2(100, 100), 60, 60, "a")
+	var b := ShapeFactory.rect(Vector2(300, 300), 60, 60, "b")
+	doc.add(a)
+	doc.add(b)
+	var cv := CanvasView.new()
+	cv._zoom = 1.0
+	cv._content_offset = Vector2.ZERO
+	cv.setup(doc)
+	cv._start_press(Vector2(20, 20))
+	cv._handle_drag(Vector2(180, 180))
+	cv._end_press()
+	_check("marquee selects only A", cv._selected.size() == 1 and cv._selected[0] == a)
+	cv._start_press(Vector2(20, 20))
+	cv._handle_drag(Vector2(400, 400))
+	cv._end_press()
+	_check("marquee selects both", cv._selected.size() == 2)
 	cv.free()

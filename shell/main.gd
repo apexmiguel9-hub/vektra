@@ -3,12 +3,15 @@ extends Node2D
 const Document := preload("res://core/model/document.gd")
 const ShapeFactory := preload("res://core/model/shape_factory.gd")
 const CanvasView := preload("res://shell/canvas_view.gd")
+const History := preload("res://core/history/history.gd")
 
 var _document: Document
+var _history: History
 
 
 func _ready() -> void:
 	_document = Document.new()
+	_history = History.new()
 	var card := ShapeFactory.rect(Vector2(300, 320), 260, 160, "Card")
 	card.fill = Color("#5a8dee")
 	card.stroke = Color("#25407a")
@@ -31,6 +34,6 @@ func _ready() -> void:
 	_document.add(btn)
 
 	var view := CanvasView.new()
-	view.setup(_document)
+	view.setup(_document, _history)
 	add_child(view)
 	view.queue_redraw()
