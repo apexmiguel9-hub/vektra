@@ -392,47 +392,30 @@ func _edge_moves_y(edge: int) -> bool:
 	return edge in [0, 1, 2, 4, 5, 6]
 
 
-func _clamp_axis(v: float, a: float, c0: float, span: float) -> float:
-	var dir := signf(c0 - a)
-	return a + dir * clampf(absf(v - a), span * RESIZE_MIN_RATIO, span * RESIZE_MAX_RATIO)
+func _pick_ratio(axis: float, a: float, c0: float, span: float) -> float:
+	var r := (axis - a) / (c0 - a)
+	var sgn := signf(r)
+	if is_zero_approx(sgn):
+		sgn = 1.0
+	return sgn * clampf(absf(r), RESIZE_MIN_RATIO, RESIZE_MAX_RATIO)
 
 
-func _clamped_corner(world: Vector2) -> Vector2:
+func _resize_ratio(world: Vector2) -> Vector2:
 	var a := _resize_anchor
 	var c0 := _resize_corner0
-	var corner := world
+	var span := _resize_start_rect.size
+	var ratio := Vector2(1.0, 1.0)
 	if _edge_moves_x(_resize_edge):
-		corner.x = _clamp_axis(world.x, a.x, c0.x, _resize_start_rect.size.x)
-	else:
-		corner.x = c0.x
+		ratio.x = _pick_ratio(world.x, a.x, c0.x, span.x)
 	if _edge_moves_y(_resize_edge):
-		corner.y = _clamp_axis(world.y, a.y, c0.y, _resize_start_rect.size.y)
-	else:
-		corner.y = c0.y
-	return corner
-
-
-func _new_resize_rect(world: Vector2) -> Rect2:
-	var a := _resize_anchor
-	var c := _clamped_corner(world)
-	var r := Rect2(minf(a.x, c.x), minf(a.y, c.y), absf(c.x - a.x), absf(c.y - a.y))
-	if not _edge_moves_x(_resize_edge):
-		r.position.x = _resize_start_rect.position.x
-		r.size.x = _resize_start_rect.size.x
-	if not _edge_moves_y(_resize_edge):
-		r.position.y = _resize_start_rect.position.y
-		r.size.y = _resize_start_rect.size.y
-	return r
+		ratio.y = _pick_ratio(world.y, a.y, c0.y, span.y)
+	return ratio
 
 
 func _apply_resize(world: Vector2) -> void:
 	if _selected.is_empty() or _resize_start_rect.size.x <= 0.0 or _resize_start_rect.size.y <= 0.0:
 		return
-	var new_rect := _new_resize_rect(world)
-	var ratio := Vector2(
-		clampf(new_rect.size.x / _resize_start_rect.size.x, RESIZE_MIN_RATIO, RESIZE_MAX_RATIO),
-		clampf(new_rect.size.y / _resize_start_rect.size.y, RESIZE_MIN_RATIO, RESIZE_MAX_RATIO)
-	)
+	var ratio := _resize_ratio(world)
 	if absf(ratio.x - 1.0) < 0.001 and absf(ratio.y - 1.0) < 0.001:
 		return
 	for s in _selected:

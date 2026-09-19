@@ -125,8 +125,8 @@ func rescale(anchor: Vector2, ratio: Vector2) -> void:
 		position = anchor + (position - anchor) * ratio
 	else:
 		position = anchor + (position - anchor) * ratio
-		size.x = maxf(size.x * ratio.x, 1.0)
-		size.y = maxf(size.y * ratio.y, 1.0)
+		size.x = maxf(size.x * absf(ratio.x), 1.0)
+		size.y = maxf(size.y * absf(ratio.y), 1.0)
 
 
 func set_rotation_deg(deg: float) -> void:

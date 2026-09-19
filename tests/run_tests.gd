@@ -545,8 +545,14 @@ func _test_resize_no_compounding() -> void:
 	cv._selected.append(r)
 	cv._begin_resize(4)
 	_check("resize start rect stored", _vec2_approx(cv._resize_start_rect.size, Vector2(60, 60)))
+	var expect_pos := Vector2.ZERO
+	var expect_sr := Rect2()
 	for i in range(5):
 		cv._apply_resize(Vector2(30, 30))
-	_check("resize absolute no compounding pos", _vec2_approx(r.position, Vector2(90, 90)))
-	_check("resize absolute no compounding size", _vec2_approx(r.size, Vector2(40, 40)))
+		if i == 0:
+			expect_sr = r.get_selrect()
+			expect_pos = r.position
+	_check("resize absolute repeats identical", _vec2_approx(r.position, expect_pos) and r.get_selrect() == expect_sr)
+	_check("resize mirror size still bounded", _vec2_approx(r.size, Vector2(40, 40)))
+	_check("resize mirror crosses anchor", _vec2_approx(r.get_selrect().position, Vector2(30, 30)))
 	cv.free()
