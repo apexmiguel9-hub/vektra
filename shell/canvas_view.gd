@@ -51,6 +51,12 @@ func _draw() -> void:
 	for s in document.shapes:
 		_draw_shape(s, content)
 	draw_set_transform_matrix(Transform2D.IDENTITY)
+	_draw_hud()
+
+
+func _draw_hud() -> void:
+	var zoom_text := "zoom %s offset %s" % [str(_zoom).pad_decimals(2), str(_content_offset)]
+	draw_string(ThemeDB.fallback_font, Vector2(10, 26), zoom_text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, 14, Color(0.28, 0.28, 0.30))
 
 
 func _draw_background() -> void:
