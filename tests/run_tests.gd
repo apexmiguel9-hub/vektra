@@ -54,6 +54,8 @@ func _init() -> void:
 	_test_resize_no_mirror()
 	_test_resize_no_compounding()
 	_test_min_selrect()
+	_test_quad_edit()
+	_test_double_tap_edit()
 	print("=== RESULTADO: %d passed, %d failed ===" % [_passed, _failed])
 	quit(0 if _failed == 0 else 1)
 
@@ -555,4 +557,50 @@ func _test_resize_no_compounding() -> void:
 	_check("resize absolute repeats identical", _vec2_approx(r.position, expect_pos) and r.get_selrect() == expect_sr)
 	_check("resize mirror size still bounded", _vec2_approx(r.size, Vector2(40, 40)))
 	_check("resize mirror crosses anchor", _vec2_approx(r.get_selrect().position, Vector2(30, 30)))
+	cv.free()
+
+
+func _test_quad_edit() -> void:
+	var cv := CanvasView.new()
+	cv._zoom = 1.0
+	cv._content_offset = Vector2.ZERO
+	var r := ShapeFactory.rect(Vector2(100, 100), 60, 60)
+	_check("rect starts as RECT", r.type == Shape.Type.RECT)
+	r.convert_to_quad()
+	_check("convert creates quad", r.type == Shape.Type.QUAD and r.quad.size() == 4)
+	var before := r.quad.duplicate()
+	_check("quad keeps bounds", _approx(r.get_selrect().size.x, 60.0) and _approx(r.get_selrect().size.y, 60.0))
+	cv._editing = r
+	cv._rebuild_edit_points()
+	_check("edit points one per vertex", cv._edit_points.size() == 4)
+	cv._set_edit_point(1, Vector2(150, 60))
+	_check("vertex 1 moved freely", _vec2_approx(r.quad[1], Vector2(150, 60)))
+	_check("others untouched during edit", _vec2_approx(r.quad[0], before[0]) and _vec2_approx(r.quad[2], before[2]) and _vec2_approx(r.quad[3], before[3]))
+	var m := ShapeFactory.rect(Vector2(100, 100), 60, 60)
+	cv._editing = m
+	cv._set_edit_point(0, Vector2(40, 40))
+	_check("edit without quad leaves rect", m.type == Shape.Type.RECT)
+	cv.free()
+
+
+func _test_double_tap_edit() -> void:
+	var doc := Document.new()
+	var r := ShapeFactory.rect(Vector2(100, 100), 60, 60)
+	doc.add(r)
+	var cv := CanvasView.new()
+	cv._zoom = 1.0
+	cv._content_offset = Vector2.ZERO
+	cv.setup(doc)
+	cv._start_press(Vector2(100, 100))
+	_check("first tap selects", cv._selected.size() == 1 and cv._selected[0] == r)
+	cv._end_press()
+	cv._start_press(Vector2(100, 100))
+	cv._end_press()
+	_check("double tap enters edit", cv._editing == r and r.type == Shape.Type.QUAD)
+	cv._start_press(Vector2(100, 100))
+	cv._end_press()
+	_check("single tap keeps edit", cv._editing == r)
+	cv._start_press(Vector2(100, 100))
+	cv._end_press()
+	_check("second double tap exits edit", cv._editing == null)
 	cv.free()

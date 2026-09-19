@@ -4,7 +4,7 @@ const PathNode := preload("res://core/model/path_node.gd")
 const SvgPath := preload("res://core/geo/svg_path.gd")
 const Bezier := preload("res://core/geo/bezier.gd")
 
-enum Type { RECT, ELLIPSE, LINE, PATH }
+enum Type { RECT, ELLIPSE, LINE, PATH, QUAD }
 
 var id := ""
 var name := ""
@@ -21,6 +21,7 @@ var line_b := Vector2.ZERO
 
 var nodes: Array[PathNode] = []
 var closed := false
+var quad := PackedVector2Array()
 
 var fill := Color(1, 1, 1, 1)
 var stroke := Color(0, 0, 0, 1)
@@ -48,6 +49,8 @@ func get_transform() -> Transform2D:
 func get_corners() -> PackedVector2Array:
 	if type == Type.LINE:
 		return PackedVector2Array([line_a, line_b])
+	if type == Type.QUAD:
+		return quad
 	var hw := size.x * 0.5
 	var hh := size.y * 0.5
 	var local := PackedVector2Array([
@@ -77,6 +80,8 @@ func get_selrect() -> Rect2:
 			minp = minp.min(pts[i])
 			maxp = maxp.max(pts[i])
 		return Rect2(minp, maxp - minp)
+	if type == Type.QUAD and quad.is_empty():
+		return Rect2(position, Vector2.ZERO)
 	var pts := get_corners()
 	var minp := pts[0]
 	var maxp := pts[0]
@@ -94,6 +99,9 @@ func move_by(delta: Vector2) -> void:
 	if type == Type.LINE:
 		line_a += delta
 		line_b += delta
+	elif type == Type.QUAD:
+		for i in range(quad.size()):
+			quad[i] = quad[i] + delta
 	else:
 		position += delta
 
@@ -101,6 +109,10 @@ func move_by(delta: Vector2) -> void:
 func get_anchor() -> Vector2:
 	if type == Type.LINE:
 		return line_a
+	if type == Type.QUAD:
+		if not quad.is_empty():
+			return quad[0]
+		return position
 	return position
 
 
@@ -109,6 +121,10 @@ func set_anchor(v: Vector2) -> void:
 		var d := v - line_a
 		line_a += d
 		line_b += d
+	elif type == Type.QUAD:
+		var d := v - get_anchor()
+		for i in range(quad.size()):
+			quad[i] = quad[i] + d
 	else:
 		position = v
 
@@ -117,6 +133,9 @@ func rescale(anchor: Vector2, ratio: Vector2) -> void:
 	if type == Type.LINE:
 		line_a = anchor + (line_a - anchor) * ratio
 		line_b = anchor + (line_b - anchor) * ratio
+	elif type == Type.QUAD:
+		for i in range(quad.size()):
+			quad[i] = anchor + (quad[i] - anchor) * ratio
 	elif type == Type.PATH:
 		for nd in nodes:
 			nd.position = anchor + (nd.position - anchor) * ratio
@@ -139,6 +158,11 @@ func contains_point(p: Vector2, threshold := 2.0) -> bool:
 	if type == Type.LINE:
 		var closest := Geometry2D.get_closest_point_to_segment(p, line_a, line_b)
 		return p.distance_to(closest) <= maxf(threshold, stroke_width * 0.5)
+	if type == Type.QUAD:
+		if quad.size() < 3:
+			return false
+		var t := maxf(threshold, stroke_width * 0.5)
+		return Bezier.point_in_polygon(p, quad) or Bezier.distance_to_polyline(p, quad) <= t
 	if type == Type.PATH:
 		var t := maxf(threshold, stroke_width * 0.5)
 		if nodes.size() < 2:
@@ -198,7 +222,15 @@ func to_dict() -> Dictionary:
 		"stroke_width": stroke_width,
 		"closed": closed,
 		"d": SvgPath.path_to_svg_data(nodes, closed),
+		"quad": _quad_to_array(),
 	}
+
+
+func _quad_to_array() -> Array:
+	var out: Array = []
+	for p in quad:
+		out.append([p.x, p.y])
+	return out
 
 
 func load_from_dict(d: Dictionary) -> void:
@@ -217,11 +249,17 @@ func load_from_dict(d: Dictionary) -> void:
 	stroke = Color(d.get("stroke", "#000000"))
 	stroke_width = d.get("stroke_width", 2.0)
 	closed = d.get("closed", false)
+	nodes.clear()
+	quad.clear()
 	if type == Type.PATH:
 		var parsed: Dictionary = SvgPath.nodes_from_svg_path_data(d.get("d", ""))
-		nodes.clear()
 		nodes.assign(parsed["nodes"])
 		closed = parsed["closed"]
+	elif type == Type.QUAD:
+		var qa: Array = d.get("quad", [])
+		for qp in qa:
+			var pa: Array = qp
+			quad.append(Vector2(pa[0], pa[1]))
 
 
 func _is_inside_local(local: Vector2) -> bool:
@@ -260,5 +298,17 @@ static func _type_from_string(t: String) -> int:
 			return Type.LINE
 		"path":
 			return Type.PATH
+		"quad":
+			return Type.QUAD
 		_:
 			return Type.RECT
+
+
+func convert_to_quad() -> void:
+	if type == Type.QUAD:
+		return
+	var c := get_corners()
+	if type == Type.LINE or c.size() != 4:
+		return
+	quad = c
+	type = Type.QUAD

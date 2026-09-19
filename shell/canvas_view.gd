@@ -43,6 +43,14 @@ var _pinch_armed := false
 var _grid_tex: ImageTexture
 
 var _selected: Array[Shape] = []
+
+var _editing = null
+var _edit_points: Array = []
+var _edit_before: Dictionary = {}
+var _drag_edit_point := -1
+var _last_tap_ms := -1000
+var _last_tap_id := ""
+var _press_hit = null
 var _press_screen := Vector2.ZERO
 var _press_world := Vector2.ZERO
 var _drag_mode := 0
@@ -90,7 +98,9 @@ func _draw() -> void:
 	for s in _selected:
 		_draw_selection_rect(s, content)
 	draw_set_transform_matrix(Transform2D.IDENTITY)
-	if _selected.size() == 1:
+	if _editing != null:
+		_draw_edit_handles()
+	elif _selected.size() == 1:
 		_draw_handles(_selected[0])
 	if _drag_mode == 2 and _drag_moved:
 		_draw_marquee()
@@ -98,9 +108,12 @@ func _draw() -> void:
 
 
 func _draw_selection_rect(s: Shape, content: Transform2D) -> void:
-	var sr := _min_visible_rect(s).grow(SELECTION_STROKE / _zoom)
 	draw_set_transform_matrix(content)
-	draw_rect(sr, SELECTION_COLOR, false, SELECTION_STROKE)
+	if s.type == Shape.Type.QUAD and s.quad.size() >= 2:
+		draw_polyline(s.quad, SELECTION_COLOR, SELECTION_STROKE, true)
+	else:
+		var sr := _min_visible_rect(s).grow(SELECTION_STROKE / _zoom)
+		draw_rect(sr, SELECTION_COLOR, false, SELECTION_STROKE)
 
 
 func _draw_marquee() -> void:
@@ -111,6 +124,8 @@ func _draw_marquee() -> void:
 func _draw_hud() -> void:
 	var zoom_text := "zoom %s offset %s" % [str(_zoom).pad_decimals(2), str(_content_offset)]
 	draw_string(ThemeDB.fallback_font, Vector2(10, 26), zoom_text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, 14, Color(0.28, 0.28, 0.30))
+	if _editing != null:
+		draw_string(ThemeDB.fallback_font, Vector2(10, 46), "EDIT MODE (doble tap sale)", HORIZONTAL_ALIGNMENT_LEFT, -1.0, 14, Color(0.2, 0.35, 0.85))
 
 
 func _draw_background() -> void:
@@ -193,8 +208,25 @@ func _start_press(screen: Vector2) -> void:
 	_press_world = _to_world(screen)
 	_drag_mode = 0
 	_drag_moved = false
+	_press_hit = _hit_test(_press_world) if document != null else null
 	if document == null:
 		return
+	if _editing != null:
+		var h := _hit_edit_handle(screen)
+		if h >= 0:
+			_drag_mode = 4
+			_drag_edit_point = h
+			queue_redraw()
+			return
+		if _press_hit == _editing:
+			_select_only(_editing)
+			_drag_mode = 1
+			_capture_origins()
+			return
+		_end_edit(true)
+		if _press_hit == null:
+			_deselect_all()
+			return
 	if _selected.size() == 1:
 		var handle := _hit_handle(screen)
 		if handle >= 0:
@@ -202,7 +234,7 @@ func _start_press(screen: Vector2) -> void:
 			_begin_resize(handle)
 			queue_redraw()
 			return
-	var hit := _hit_test(_press_world)
+	var hit: Shape = _press_hit
 	if hit != null:
 		_select_only(hit)
 		_drag_mode = 1
@@ -237,6 +269,8 @@ func _handle_drag(screen: Vector2) -> void:
 		_marquee_end_world = _to_world(screen)
 	elif _drag_mode == 3:
 		_apply_resize(_to_world(screen))
+	elif _drag_mode == 4:
+		_set_edit_point(_drag_edit_point, _to_world(screen))
 	queue_redraw()
 
 
@@ -244,16 +278,95 @@ func _end_press() -> void:
 	if _drag_mode == 1:
 		if _drag_moved:
 			_commit_move()
+		else:
+			_detect_double_tap()
 	elif _drag_mode == 2:
 		if _drag_moved:
 			_select_in_marquee()
 		else:
-			_deselect_all()
+			_detect_double_tap()
+			if _editing == null and _press_hit == null:
+				_deselect_all()
 	elif _drag_mode == 3:
 		_commit_resize()
 	_drag_mode = 0
 	_drag_moved = false
 	_drag_origins.clear()
+
+
+func _detect_double_tap() -> void:
+	var now := Time.get_ticks_msec()
+	if _press_hit != null and _press_hit.id == _last_tap_id and now - _last_tap_ms < 450:
+		if _editing == _press_hit:
+			_end_edit(true)
+		else:
+			_begin_edit(_press_hit)
+		_last_tap_ms = -1000
+		_last_tap_id = ""
+	else:
+		if _press_hit != null:
+			_last_tap_ms = now
+			_last_tap_id = _press_hit.id
+		else:
+			_last_tap_ms = -1000
+			_last_tap_id = ""
+
+
+func _begin_edit(s: Shape) -> void:
+	if s.type == Shape.Type.RECT:
+		_edit_before = s.to_dict()
+		s.convert_to_quad()
+	else:
+		_edit_before = s.to_dict()
+	_editing = s
+	_rebuild_edit_points()
+	_select_only(s)
+	queue_redraw()
+
+
+func _end_edit(p_commit: bool) -> void:
+	if _editing == null:
+		return
+	var s: Shape = _editing
+	var after: Dictionary = s.to_dict()
+	if p_commit and after != _edit_before and history != null:
+		history.push(ResizeShapeCommand.new(s, _edit_before, after))
+	_editing = null
+	_edit_points.clear()
+	_drag_edit_point = -1
+	queue_redraw()
+
+
+func _rebuild_edit_points() -> void:
+	_edit_points.clear()
+	var s = _editing
+	if s == null:
+		return
+	if s.type == Shape.Type.QUAD:
+		for p in s.quad:
+			_edit_points.append(p)
+	elif s.type == Shape.Type.LINE:
+		_edit_points.append(s.line_a)
+		_edit_points.append(s.line_b)
+	elif s.type == Shape.Type.PATH:
+		for nd in s.nodes:
+			_edit_points.append(nd.position)
+
+
+func _set_edit_point(i: int, world: Vector2) -> void:
+	var s = _editing
+	if s == null:
+		return
+	if s.type == Shape.Type.QUAD and s.quad.size() > i:
+		s.quad[i] = world
+	elif s.type == Shape.Type.LINE:
+		if i == 0:
+			s.line_a = world
+		elif i == 1:
+			s.line_b = world
+	elif s.type == Shape.Type.PATH and i < s.nodes.size():
+		s.nodes[i].position = world
+	_edit_points[i] = world
 
 
 func _cancel_pointer_action() -> void:
@@ -273,6 +386,8 @@ func _select_only(s: Shape) -> void:
 
 
 func _deselect_all() -> void:
+	if _editing != null:
+		_end_edit(true)
 	_selected.clear()
 	queue_redraw()
 
@@ -311,12 +426,28 @@ func _hit_test(world: Vector2) -> Shape:
 func _hit_handle(screen: Vector2) -> int:
 	var sr := _min_visible_rect(_selected[0])
 	var pts := _handle_positions(sr)
-	var real := _selected[0].get_selrect()
 	var reach := minf(HANDLE_HIT_PX, minf(sr.size.x, sr.size.y) * _zoom * 0.45)
 	for i in range(pts.size()):
-		if _handle_visible(i, real) and pts[i].distance_to(screen) <= reach:
+		if _handle_visible(i) and pts[i].distance_to(screen) <= reach:
 			return i
 	return -1
+
+
+func _hit_edit_handle(screen: Vector2) -> int:
+	if _editing == null:
+		return -1
+	var pts := _edit_handles_screen()
+	for i in range(pts.size()):
+		if pts[i].distance_to(screen) <= HANDLE_HIT_PX:
+			return i
+	return -1
+
+
+func _edit_handles_screen() -> Array[Vector2]:
+	var out: Array[Vector2] = []
+	for w in _edit_points:
+		out.append(w * _zoom + _content_offset)
+	return out
 
 
 func _min_visible_rect(s: Shape) -> Rect2:
@@ -326,12 +457,10 @@ func _min_visible_rect(s: Shape) -> Rect2:
 	return sr.grow_individual(grow_x, grow_y, grow_x, grow_y)
 
 
-func _handle_visible(edge: int, real: Rect2) -> bool:
+func _handle_visible(edge: int) -> bool:
 	match edge:
-		1, 5:
-			return real.size.y * _zoom >= MIN_SELRECT_PX
-		3, 7:
-			return real.size.x * _zoom >= MIN_SELRECT_PX
+		1, 3, 5, 7:
+			return false
 		_:
 			return true
 
@@ -436,14 +565,20 @@ func _commit_resize() -> void:
 
 
 func _draw_handles(s: Shape) -> void:
-	var real := s.get_selrect()
 	var sr := _min_visible_rect(s)
 	var pts := _handle_positions(sr)
 	for i in range(pts.size()):
-		if not _handle_visible(i, real):
+		if not _handle_visible(i):
 			continue
 		draw_circle(pts[i], HANDLE_RADIUS, Color.WHITE)
 		draw_arc(pts[i], HANDLE_RADIUS, 0.0, TAU, 24, SELECTION_COLOR, HANDLE_STROKE)
+
+
+func _draw_edit_handles() -> void:
+	var pts := _edit_handles_screen()
+	for p in pts:
+		draw_circle(p, HANDLE_RADIUS, Color.WHITE)
+		draw_arc(p, HANDLE_RADIUS, 0.0, TAU, 24, SELECTION_COLOR, HANDLE_STROKE)
 
 
 func _sync_baseline() -> void:
@@ -485,6 +620,11 @@ func _draw_shape(s: Shape, content: Transform2D) -> void:
 					draw_polyline(poly, s.stroke, s.stroke_width, true)
 				else:
 					draw_polyline(poly, s.stroke, s.stroke_width, false)
+		Shape.Type.QUAD:
+			draw_set_transform_matrix(content)
+			if s.quad.size() >= 3:
+				draw_colored_polygon(s.quad, s.fill)
+				draw_polyline(s.quad, s.stroke, s.stroke_width, true)
 
 
 func _draw_ellipse(s: Shape, content: Transform2D) -> void:
