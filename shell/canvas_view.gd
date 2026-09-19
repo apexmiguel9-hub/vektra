@@ -12,9 +12,9 @@ const TILE_CELLS := 16
 const MIN_PINCH_DIST := 24.0
 const TAP_SLOP := 12.0
 const FAT_FINGER_PX := 14.0
-const HANDLE_RADIUS := 24.0
-const HANDLE_STROKE := 5.0
-const HANDLE_HIT_PX := 40.0
+const HANDLE_RADIUS := 36.0
+const HANDLE_STROKE := 6.0
+const HANDLE_HIT_PX := 60.0
 const MIN_SELRECT_PX := 10.0
 const SELECTION_STROKE := 2.0
 
@@ -293,6 +293,9 @@ func _end_press() -> void:
 				_deselect_all()
 	elif _drag_mode == 3:
 		_commit_resize()
+	elif _drag_mode == 4:
+		if not _drag_moved:
+			_detect_double_tap()
 	_drag_mode = 0
 	_drag_moved = false
 	_drag_origins.clear()
