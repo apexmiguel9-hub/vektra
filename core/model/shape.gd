@@ -113,6 +113,22 @@ func set_anchor(v: Vector2) -> void:
 		position = v
 
 
+func rescale(anchor: Vector2, ratio: Vector2) -> void:
+	if type == Type.LINE:
+		line_a = anchor + (line_a - anchor) * ratio
+		line_b = anchor + (line_b - anchor) * ratio
+	elif type == Type.PATH:
+		for nd in nodes:
+			nd.position = anchor + (nd.position - anchor) * ratio
+			nd.c1 = anchor + (nd.c1 - anchor) * ratio
+			nd.c2 = anchor + (nd.c2 - anchor) * ratio
+		position = anchor + (position - anchor) * ratio
+	else:
+		position = anchor + (position - anchor) * ratio
+		size.x = maxf(size.x * ratio.x, 1.0)
+		size.y = maxf(size.y * ratio.y, 1.0)
+
+
 func set_rotation_deg(deg: float) -> void:
 	rotation_deg = fposmod(deg, 360.0)
 

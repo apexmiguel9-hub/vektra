@@ -10,6 +10,7 @@ const History := preload("res://core/history/history.gd")
 const AddShapeCommand := preload("res://core/history/add_shape_command.gd")
 const RemoveShapeCommand := preload("res://core/history/remove_shape_command.gd")
 const MoveShapeCommand := preload("res://core/history/move_shape_command.gd")
+const ResizeShapeCommand := preload("res://core/history/resize_shape_command.gd")
 const CanvasView := preload("res://shell/canvas_view.gd")
 
 var _passed := 0
@@ -48,6 +49,8 @@ func _init() -> void:
 	_test_line_selectable()
 	_test_line_move_via_anchor()
 	_test_history_move_line()
+	_test_resize_rect()
+	_test_resize_undo()
 	print("=== RESULTADO: %d passed, %d failed ===" % [_passed, _failed])
 	quit(0 if _failed == 0 else 1)
 
@@ -465,3 +468,36 @@ func _test_history_move_line() -> void:
 	_check("line command applied", _vec2_approx(l.line_a, Vector2(50, 50)) and _vec2_approx(l.line_b, Vector2(150, 50)))
 	hist.undo()
 	_check("line command undone", _vec2_approx(l.line_a, Vector2(0, 0)) and _vec2_approx(l.line_b, Vector2(100, 0)))
+
+
+func _test_resize_rect() -> void:
+	var cv := CanvasView.new()
+	cv._zoom = 1.0
+	cv._content_offset = Vector2.ZERO
+	var r := ShapeFactory.rect(Vector2(100, 100), 60, 60)
+	cv._selected.clear()
+	cv._selected.append(r)
+	cv._begin_resize(0)
+	_check("resize anchor is opposite corner", _vec2_approx(cv._resize_anchor, Vector2(130, 130)))
+	cv._apply_resize(Vector2(90, 90))
+	_check("resize shrinks size", _vec2_approx(r.size, Vector2(40, 40)))
+	_check("resize moves center", _vec2_approx(r.position, Vector2(110, 110)))
+	_check("resize keeps anchor corner", _vec2_approx(r.get_selrect().end, Vector2(130, 130)))
+	cv._begin_resize(0)
+	cv._apply_resize(Vector2(70, 70))
+	_check("resize grows", _vec2_approx(r.size, Vector2(60, 60)))
+	_check("resize still anchored", _vec2_approx(r.get_selrect().end, Vector2(130, 130)))
+	cv.free()
+
+
+func _test_resize_undo() -> void:
+	var r := ShapeFactory.rect(Vector2(100, 100), 60, 60)
+	var before := r.to_dict()
+	r.rescale(Vector2(130, 130), Vector2(0.5, 0.5))
+	var after := r.to_dict()
+	var hist := History.new()
+	hist.push(ResizeShapeCommand.new(r, before, after))
+	hist.undo()
+	_check("resize undo restores", _vec2_approx(r.position, Vector2(100, 100)) and _vec2_approx(r.size, Vector2(60, 60)))
+	hist.redo()
+	_check("resize redo reapplies", _vec2_approx(r.position, Vector2(115, 115)) and _vec2_approx(r.size, Vector2(30, 30)))

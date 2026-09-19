@@ -4,6 +4,7 @@ const Document := preload("res://core/model/document.gd")
 const Shape := preload("res://core/model/shape.gd")
 const History := preload("res://core/history/history.gd")
 const MoveShapeCommand := preload("res://core/history/move_shape_command.gd")
+const ResizeShapeCommand := preload("res://core/history/resize_shape_command.gd")
 
 const GRID_SPACING := 24.0
 const GRID_DOT_RADIUS := 1.6
@@ -11,10 +12,12 @@ const TILE_CELLS := 16
 const MIN_PINCH_DIST := 24.0
 const TAP_SLOP := 12.0
 const FAT_FINGER_PX := 14.0
+const HANDLE_SIZE := 12.0
+const HANDLE_HIT_PX := 24.0
+const SELECTION_STROKE := 2.0
 const CANVAS_COLOR := Color("#ffffff")
 const GRID_COLOR := Color("#d9d9d9")
 const SELECTION_COLOR := Color("#335dff")
-const MARQUEE_FILL := Color(0.2, 0.36, 1.0, 0.14)
 const MIN_ZOOM := 0.2
 const MAX_ZOOM := 8.0
 
@@ -38,6 +41,11 @@ var _drag_origins := {}
 var _marquee_start_world := Vector2.ZERO
 var _marquee_end_world := Vector2.ZERO
 var _marquee_screen_end := Vector2.ZERO
+
+var _resize_edge := -1
+var _resize_anchor := Vector2.ZERO
+var _resize_start_rect := Rect2()
+var _resize_befores := {}
 
 
 func setup(doc: Document, p_history: History = null) -> void:
@@ -70,6 +78,8 @@ func _draw() -> void:
 		_draw_shape(s, content)
 	for s in _selected:
 		_draw_selection_rect(s, content)
+	if _selected.size() == 1:
+		_draw_handles(_selected[0].get_selrect())
 	draw_set_transform_matrix(Transform2D.IDENTITY)
 	if _drag_mode == 2 and _drag_moved:
 		_draw_marquee()
@@ -80,14 +90,12 @@ func _draw_selection_rect(s: Shape, content: Transform2D) -> void:
 	var stroke := maxf(2.0 / _zoom, 1.0)
 	var sr := s.get_selrect().grow(stroke * 0.5)
 	draw_set_transform_matrix(content)
-	draw_rect(sr, MARQUEE_FILL, true)
 	draw_rect(sr, SELECTION_COLOR, false, stroke)
 
 
 func _draw_marquee() -> void:
 	var rect := _rect_from_points(_press_screen, _marquee_screen_end)
-	draw_rect(rect, MARQUEE_FILL, true)
-	draw_rect(rect, SELECTION_COLOR, false, 2.0)
+	draw_rect(rect, SELECTION_COLOR, false, SELECTION_STROKE)
 
 
 func _draw_hud() -> void:
@@ -177,6 +185,13 @@ func _start_press(screen: Vector2) -> void:
 	_drag_moved = false
 	if document == null:
 		return
+	if _selected.size() == 1:
+		var handle := _hit_handle(screen)
+		if handle >= 0:
+			_drag_mode = 3
+			_begin_resize(handle)
+			queue_redraw()
+			return
 	var hit := _hit_test(_press_world)
 	if hit != null:
 		_select_only(hit)
@@ -203,6 +218,8 @@ func _handle_drag(screen: Vector2) -> void:
 	elif _drag_mode == 2:
 		_marquee_screen_end = screen
 		_marquee_end_world = _to_world(screen)
+	elif _drag_mode == 3:
+		_apply_resize(_to_world(screen))
 	queue_redraw()
 
 
@@ -215,6 +232,8 @@ func _end_press() -> void:
 			_select_in_marquee()
 		else:
 			_deselect_all()
+	elif _drag_mode == 3:
+		_commit_resize()
 	_drag_mode = 0
 	_drag_moved = false
 	_drag_origins.clear()
@@ -223,6 +242,8 @@ func _end_press() -> void:
 func _cancel_pointer_action() -> void:
 	if _drag_mode == 1 and _drag_moved:
 		_commit_move()
+	elif _drag_mode == 3:
+		_commit_resize()
 	_drag_mode = 0
 	_drag_moved = false
 	_drag_origins.clear()
@@ -268,6 +289,118 @@ func _commit_move() -> void:
 
 func _hit_test(world: Vector2) -> Shape:
 	return document.hit_test(world, maxf(2.0, FAT_FINGER_PX / _zoom))
+
+
+func _hit_handle(screen: Vector2) -> int:
+	var pts := _handle_positions(_selected[0].get_selrect())
+	for i in range(pts.size()):
+		if pts[i].distance_to(screen) <= HANDLE_HIT_PX:
+			return i
+	return -1
+
+
+func _handle_positions(sr: Rect2) -> Array[Vector2]:
+	var world := [
+		sr.position,
+		Vector2(sr.position.x + sr.size.x * 0.5, sr.position.y),
+		Vector2(sr.end.x, sr.position.y),
+		Vector2(sr.end.x, sr.position.y + sr.size.y * 0.5),
+		sr.end,
+		Vector2(sr.position.x + sr.size.x * 0.5, sr.end.y),
+		Vector2(sr.position.x, sr.end.y),
+		Vector2(sr.position.x, sr.position.y + sr.size.y * 0.5),
+	]
+	var out: Array[Vector2] = []
+	for w in world:
+		out.append(w * _zoom + _content_offset)
+	return out
+
+
+func _begin_resize(edge: int) -> void:
+	var sr := _selected[0].get_selrect()
+	_resize_start_rect = sr
+	_resize_edge = edge
+	_resize_anchor = _anchor_for_edge(sr, edge)
+	_resize_befores.clear()
+	for s in _selected:
+		_resize_befores[s] = s.to_dict()
+
+
+func _anchor_for_edge(sr: Rect2, edge: int) -> Vector2:
+	match edge:
+		0:
+			return sr.end
+		1:
+			return Vector2(sr.position.x + sr.size.x * 0.5, sr.end.y)
+		2:
+			return Vector2(sr.position.x, sr.end.y)
+		3:
+			return Vector2(sr.position.x, sr.position.y + sr.size.y * 0.5)
+		4:
+			return sr.position
+		5:
+			return Vector2(sr.position.x + sr.size.x * 0.5, sr.position.y)
+		6:
+			return Vector2(sr.end.x, sr.position.y)
+		_:
+			return Vector2(sr.end.x, sr.position.y + sr.size.y * 0.5)
+
+
+func _new_resize_rect(world: Vector2) -> Rect2:
+	var sr := _resize_start_rect
+	var a := _resize_anchor
+	match _resize_edge:
+		0, 2, 4, 6:
+			var tl := Vector2(minf(a.x, world.x), minf(a.y, world.y))
+			var br := Vector2(maxf(a.x, world.x), maxf(a.y, world.y))
+			return Rect2(tl, (br - tl).max(Vector2(1, 1)))
+		1:
+			var top := minf(world.y, a.y - 1.0)
+			return Rect2(sr.position.x, top, sr.size.x, a.y - top)
+		5:
+			var bottom := maxf(world.y, a.y + 1.0)
+			return Rect2(sr.position.x, sr.position.y, sr.size.x, bottom - sr.position.y)
+		3:
+			var right := maxf(world.x, a.x + 1.0)
+			return Rect2(sr.position.x, sr.position.y, right - sr.position.x, sr.size.y)
+		_:
+			var left := minf(world.x, a.x - 1.0)
+			return Rect2(left, sr.position.y, a.x - left, sr.size.y)
+
+
+func _apply_resize(world: Vector2) -> void:
+	if _selected.is_empty() or _resize_start_rect.size.x <= 0.0 or _resize_start_rect.size.y <= 0.0:
+		return
+	var new_rect := _new_resize_rect(world)
+	var ratio := Vector2(
+		new_rect.size.x / _resize_start_rect.size.x,
+		new_rect.size.y / _resize_start_rect.size.y
+	)
+	ratio.x = maxf(ratio.x, 0.01)
+	ratio.y = maxf(ratio.y, 0.01)
+	if absf(ratio.x - 1.0) < 0.001 and absf(ratio.y - 1.0) < 0.001:
+		return
+	for s in _selected:
+		s.rescale(_resize_anchor, ratio)
+	queue_redraw()
+
+
+func _commit_resize() -> void:
+	for s in _resize_befores:
+		var before: Dictionary = _resize_befores[s]
+		var after: Dictionary = s.to_dict()
+		if after != before and history != null:
+			history.push(ResizeShapeCommand.new(s, before, after))
+	_resize_befores.clear()
+	queue_redraw()
+
+
+func _draw_handles(sr: Rect2) -> void:
+	var pts := _handle_positions(sr)
+	for p in pts:
+		var r := Rect2(p - Vector2(HANDLE_SIZE * 0.5, HANDLE_SIZE * 0.5), Vector2(HANDLE_SIZE, HANDLE_SIZE))
+		draw_rect(r, Color.WHITE, true)
+		draw_rect(r, SELECTION_COLOR, false, 2.0)
 
 
 func _sync_baseline() -> void:
