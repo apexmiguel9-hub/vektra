@@ -12,8 +12,9 @@ const TILE_CELLS := 16
 const MIN_PINCH_DIST := 24.0
 const TAP_SLOP := 12.0
 const FAT_FINGER_PX := 14.0
-const HANDLE_SIZE := 12.0
+const HANDLE_RADIUS := 6.0
 const HANDLE_HIT_PX := 24.0
+const MIN_SELRECT_PX := 10.0
 const SELECTION_STROKE := 2.0
 const CANVAS_COLOR := Color("#ffffff")
 const GRID_COLOR := Color("#d9d9d9")
@@ -78,19 +79,18 @@ func _draw() -> void:
 		_draw_shape(s, content)
 	for s in _selected:
 		_draw_selection_rect(s, content)
-	if _selected.size() == 1:
-		_draw_handles(_selected[0].get_selrect())
 	draw_set_transform_matrix(Transform2D.IDENTITY)
+	if _selected.size() == 1:
+		_draw_handles(_selected[0])
 	if _drag_mode == 2 and _drag_moved:
 		_draw_marquee()
 	_draw_hud()
 
 
 func _draw_selection_rect(s: Shape, content: Transform2D) -> void:
-	var stroke := maxf(2.0 / _zoom, 1.0)
-	var sr := s.get_selrect().grow(stroke * 0.5)
+	var sr := _min_visible_rect(s).grow(SELECTION_STROKE / _zoom)
 	draw_set_transform_matrix(content)
-	draw_rect(sr, SELECTION_COLOR, false, stroke)
+	draw_rect(sr, SELECTION_COLOR, false, SELECTION_STROKE)
 
 
 func _draw_marquee() -> void:
@@ -198,6 +198,13 @@ func _start_press(screen: Vector2) -> void:
 		_drag_mode = 1
 		_capture_origins()
 	else:
+		if _selected.size() == 1:
+			var vr := _min_visible_rect(_selected[0])
+			if vr.has_point(_press_world):
+				_drag_mode = 1
+				_capture_origins()
+				queue_redraw()
+				return
 		_drag_mode = 2
 		_marquee_start_world = _press_world
 		_marquee_end_world = _press_world
@@ -292,11 +299,30 @@ func _hit_test(world: Vector2) -> Shape:
 
 
 func _hit_handle(screen: Vector2) -> int:
-	var pts := _handle_positions(_selected[0].get_selrect())
+	var sr := _min_visible_rect(_selected[0])
+	var pts := _handle_positions(sr)
+	var real := _selected[0].get_selrect()
 	for i in range(pts.size()):
-		if pts[i].distance_to(screen) <= HANDLE_HIT_PX:
+		if _handle_visible(i, real) and pts[i].distance_to(screen) <= HANDLE_HIT_PX:
 			return i
 	return -1
+
+
+func _min_visible_rect(s: Shape) -> Rect2:
+	var sr := s.get_selrect()
+	var grow_x := maxf((MIN_SELRECT_PX / _zoom - sr.size.x) * 0.5, 0.0)
+	var grow_y := maxf((MIN_SELRECT_PX / _zoom - sr.size.y) * 0.5, 0.0)
+	return sr.grow_individual(grow_x, grow_y, grow_x, grow_y)
+
+
+func _handle_visible(edge: int, real: Rect2) -> bool:
+	match edge:
+		1, 5:
+			return real.size.y * _zoom >= MIN_SELRECT_PX
+		3, 7:
+			return real.size.x * _zoom >= MIN_SELRECT_PX
+		_:
+			return true
 
 
 func _handle_positions(sr: Rect2) -> Array[Vector2]:
@@ -395,12 +421,14 @@ func _commit_resize() -> void:
 	queue_redraw()
 
 
-func _draw_handles(sr: Rect2) -> void:
+func _draw_handles(s: Shape) -> void:
+	var real := s.get_selrect()
+	var sr := _min_visible_rect(s)
 	var pts := _handle_positions(sr)
-	for p in pts:
-		var r := Rect2(p - Vector2(HANDLE_SIZE * 0.5, HANDLE_SIZE * 0.5), Vector2(HANDLE_SIZE, HANDLE_SIZE))
-		draw_rect(r, Color.WHITE, true)
-		draw_rect(r, SELECTION_COLOR, false, 2.0)
+	for i in range(pts.size()):
+		if not _handle_visible(i, real):
+			continue
+		draw_arc(pts[i], HANDLE_RADIUS, 0.0, TAU, 24, SELECTION_COLOR, SELECTION_STROKE)
 
 
 func _sync_baseline() -> void:

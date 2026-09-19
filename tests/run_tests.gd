@@ -51,6 +51,7 @@ func _init() -> void:
 	_test_history_move_line()
 	_test_resize_rect()
 	_test_resize_undo()
+	_test_min_selrect()
 	print("=== RESULTADO: %d passed, %d failed ===" % [_passed, _failed])
 	quit(0 if _failed == 0 else 1)
 
@@ -501,3 +502,16 @@ func _test_resize_undo() -> void:
 	_check("resize undo restores", _vec2_approx(r.position, Vector2(100, 100)) and _vec2_approx(r.size, Vector2(60, 60)))
 	hist.redo()
 	_check("resize redo reapplies", _vec2_approx(r.position, Vector2(115, 115)) and _vec2_approx(r.size, Vector2(30, 30)))
+
+
+func _test_min_selrect() -> void:
+	var cv := CanvasView.new()
+	cv._zoom = 1.0
+	var l := ShapeFactory.line(Vector2(0, 0), Vector2(100, 0))
+	var sr := cv._min_visible_rect(l)
+	_check("min rect inflates thin axis to 10px", _approx(sr.size.y, 10.0))
+	_check("min rect keeps long axis", _approx(sr.size.x, 102.0))
+	var r := ShapeFactory.rect(Vector2(0, 0), 200, 200)
+	sr = cv._min_visible_rect(r)
+	_check("min rect no inflate on big shape", _approx(sr.size.y, 200.0) and _approx(sr.size.x, 200.0))
+	cv.free()
