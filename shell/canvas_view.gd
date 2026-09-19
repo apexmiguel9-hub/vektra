@@ -12,9 +12,9 @@ const TILE_CELLS := 16
 const MIN_PINCH_DIST := 24.0
 const TAP_SLOP := 12.0
 const FAT_FINGER_PX := 14.0
-const HANDLE_RADIUS := 16.0
-const HANDLE_STROKE := 4.0
-const HANDLE_HIT_PX := 24.0
+const HANDLE_RADIUS := 24.0
+const HANDLE_STROKE := 5.0
+const HANDLE_HIT_PX := 40.0
 const MIN_SELRECT_PX := 10.0
 const SELECTION_STROKE := 2.0
 
@@ -312,8 +312,9 @@ func _hit_handle(screen: Vector2) -> int:
 	var sr := _min_visible_rect(_selected[0])
 	var pts := _handle_positions(sr)
 	var real := _selected[0].get_selrect()
+	var reach := minf(HANDLE_HIT_PX, minf(sr.size.x, sr.size.y) * _zoom * 0.45)
 	for i in range(pts.size()):
-		if _handle_visible(i, real) and pts[i].distance_to(screen) <= HANDLE_HIT_PX:
+		if _handle_visible(i, real) and pts[i].distance_to(screen) <= reach:
 			return i
 	return -1
 
@@ -435,6 +436,8 @@ func _apply_resize(world: Vector2) -> void:
 	if absf(ratio.x - 1.0) < 0.001 and absf(ratio.y - 1.0) < 0.001:
 		return
 	for s in _selected:
+		var before: Dictionary = _resize_befores[s]
+		s.load_from_dict(before)
 		s.rescale(_resize_anchor, ratio)
 	queue_redraw()
 

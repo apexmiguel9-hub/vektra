@@ -52,6 +52,7 @@ func _init() -> void:
 	_test_resize_rect()
 	_test_resize_undo()
 	_test_resize_no_mirror()
+	_test_resize_no_compounding()
 	_test_min_selrect()
 	print("=== RESULTADO: %d passed, %d failed ===" % [_passed, _failed])
 	quit(0 if _failed == 0 else 1)
@@ -534,4 +535,18 @@ func _test_min_selrect() -> void:
 	var r := ShapeFactory.rect(Vector2(0, 0), 200, 200)
 	sr = cv._min_visible_rect(r)
 	_check("min rect no inflate on big shape", _approx(sr.size.y, 200.0) and _approx(sr.size.x, 200.0))
+	cv.free()
+
+
+func _test_resize_no_compounding() -> void:
+	var cv := CanvasView.new()
+	cv._zoom = 1.0
+	var r := ShapeFactory.rect(Vector2(100, 100), 60, 60)
+	cv._selected.append(r)
+	cv._begin_resize(4)
+	_check("resize start rect stored", _vec2_approx(cv._resize_start_rect.size, Vector2(60, 60)))
+	for i in range(5):
+		cv._apply_resize(Vector2(30, 30))
+	_check("resize absolute no compounding pos", _vec2_approx(r.position, Vector2(90, 90)))
+	_check("resize absolute no compounding size", _vec2_approx(r.size, Vector2(40, 40)))
 	cv.free()
