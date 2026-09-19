@@ -46,6 +46,8 @@ func _init() -> void:
 	_test_selection_empty_tap_deselects()
 	_test_marquee_selects()
 	_test_line_selectable()
+	_test_line_move_via_anchor()
+	_test_history_move_line()
 	print("=== RESULTADO: %d passed, %d failed ===" % [_passed, _failed])
 	quit(0 if _failed == 0 else 1)
 
@@ -439,3 +441,27 @@ func _test_line_selectable() -> void:
 	cv._end_press()
 	_check("line missed far away", cv._selected.is_empty())
 	cv.free()
+
+
+func _test_line_move_via_anchor() -> void:
+	var doc := Document.new()
+	var l := ShapeFactory.line(Vector2(0, 0), Vector2(400, 0), "l")
+	doc.add(l)
+	var cv := CanvasView.new()
+	cv._zoom = 1.0
+	cv._content_offset = Vector2.ZERO
+	cv.setup(doc)
+	cv._start_press(Vector2(200, 0))
+	cv._handle_drag(Vector2(230, 60))
+	cv._end_press()
+	_check("line moved both endpoints", _vec2_approx(l.line_a, Vector2(30, 60)) and _vec2_approx(l.line_b, Vector2(430, 60)))
+	cv.free()
+
+
+func _test_history_move_line() -> void:
+	var l := ShapeFactory.line(Vector2(0, 0), Vector2(100, 0))
+	var hist := History.new()
+	hist.push(MoveShapeCommand.new(l, Vector2(0, 0), Vector2(50, 50)))
+	_check("line command applied", _vec2_approx(l.line_a, Vector2(50, 50)) and _vec2_approx(l.line_b, Vector2(150, 50)))
+	hist.undo()
+	_check("line command undone", _vec2_approx(l.line_a, Vector2(0, 0)) and _vec2_approx(l.line_b, Vector2(100, 0)))

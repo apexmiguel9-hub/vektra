@@ -70,9 +70,9 @@ func _draw() -> void:
 		_draw_shape(s, content)
 	for s in _selected:
 		_draw_selection_rect(s, content)
+	draw_set_transform_matrix(Transform2D.IDENTITY)
 	if _drag_mode == 2 and _drag_moved:
 		_draw_marquee()
-	draw_set_transform_matrix(Transform2D.IDENTITY)
 	_draw_hud()
 
 
@@ -199,7 +199,7 @@ func _handle_drag(screen: Vector2) -> void:
 		var cur_world := _to_world(screen)
 		var delta := cur_world - _press_world
 		for s in _selected:
-			s.position = _drag_origins[s] + delta
+			s.set_anchor(_drag_origins[s] + delta)
 	elif _drag_mode == 2:
 		_marquee_screen_end = screen
 		_marquee_end_world = _to_world(screen)
@@ -254,14 +254,14 @@ func _rect_from_points(a: Vector2, b: Vector2) -> Rect2:
 func _capture_origins() -> void:
 	_drag_origins.clear()
 	for s in _selected:
-		_drag_origins[s] = s.position
+		_drag_origins[s] = s.get_anchor()
 
 
 func _commit_move() -> void:
 	for s in _selected:
 		var origin: Vector2 = _drag_origins[s]
-		if origin != s.position and history != null:
-			history.push(MoveShapeCommand.new(s, origin, s.position))
+		if origin != s.get_anchor() and history != null:
+			history.push(MoveShapeCommand.new(s, origin, s.get_anchor()))
 	_drag_origins.clear()
 	queue_redraw()
 

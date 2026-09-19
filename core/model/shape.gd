@@ -91,7 +91,26 @@ func get_center() -> Vector2:
 
 
 func move_by(delta: Vector2) -> void:
-	position += delta
+	if type == Type.LINE:
+		line_a += delta
+		line_b += delta
+	else:
+		position += delta
+
+
+func get_anchor() -> Vector2:
+	if type == Type.LINE:
+		return line_a
+	return position
+
+
+func set_anchor(v: Vector2) -> void:
+	if type == Type.LINE:
+		var d := v - line_a
+		line_a += d
+		line_b += d
+	else:
+		position = v
 
 
 func set_rotation_deg(deg: float) -> void:
