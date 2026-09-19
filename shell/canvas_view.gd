@@ -264,6 +264,10 @@ func _handle_drag(screen: Vector2) -> void:
 		var delta := cur_world - _press_world
 		for s in _selected:
 			s.set_anchor(_drag_origins[s] + delta)
+		if _editing != null and _selected.has(_editing):
+			_rebuild_edit_points()
+		if _editing != null and _selected.has(_editing):
+			_rebuild_edit_points()
 	elif _drag_mode == 2:
 		_marquee_screen_end = screen
 		_marquee_end_world = _to_world(screen)

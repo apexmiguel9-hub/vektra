@@ -604,3 +604,17 @@ func _test_double_tap_edit() -> void:
 	cv._end_press()
 	_check("second double tap exits edit", cv._editing == null)
 	cv.free()
+
+func _test_edit_points_follow_move() -> void:
+	var cv := CanvasView.new()
+	cv._zoom = 1.0
+	var r := ShapeFactory.rect(Vector2(100, 100), 60, 60)
+	cv._begin_edit(r)
+	var before: Vector2 = cv._edit_points[0]
+	cv._start_press(Vector2(130, 130))
+	cv._handle_drag(Vector2(160, 160))
+	var now: Vector2 = cv._edit_points[0]
+	_check("edit handle index0 follows move", _vec2_approx(before + Vector2(30, 30), now))
+	var moved := r.get_selrect()
+	_check("shape moved too", _vec2_approx(moved.position, Vector2(130, 130)))
+	cv.free()
