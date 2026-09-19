@@ -12,11 +12,19 @@ const TILE_CELLS := 16
 const MIN_PINCH_DIST := 24.0
 const TAP_SLOP := 12.0
 const FAT_FINGER_PX := 14.0
-const HANDLE_RADIUS := 9.0
-const HANDLE_STROKE := 3.0
+const HANDLE_RADIUS := 16.0
+const HANDLE_STROKE := 4.0
 const HANDLE_HIT_PX := 24.0
 const MIN_SELRECT_PX := 10.0
 const SELECTION_STROKE := 2.0
+
+const RESIZE_MIN_RATIO := 0.02
+const RESIZE_MAX_RATIO := 200.0
+
+const _EDGE_FRACTIONS := [
+	[0.0, 0.0], [0.5, 0.0], [1.0, 0.0], [1.0, 0.5],
+	[1.0, 1.0], [0.5, 1.0], [0.0, 1.0], [0.0, 0.5],
+]
 const CANVAS_COLOR := Color("#ffffff")
 const GRID_COLOR := Color("#d9d9d9")
 const SELECTION_COLOR := Color("#335dff")
@@ -46,6 +54,7 @@ var _marquee_screen_end := Vector2.ZERO
 
 var _resize_edge := -1
 var _resize_anchor := Vector2.ZERO
+var _resize_corner0 := Vector2.ZERO
 var _resize_start_rect := Rect2()
 var _resize_befores := {}
 
@@ -348,6 +357,7 @@ func _begin_resize(edge: int) -> void:
 	_resize_start_rect = sr
 	_resize_edge = edge
 	_resize_anchor = _anchor_for_edge(sr, edge)
+	_resize_corner0 = sr.position + Vector2(sr.size.x * _EDGE_FRACTIONS[edge][0], sr.size.y * _EDGE_FRACTIONS[edge][1])
 	_resize_befores.clear()
 	for s in _selected:
 		_resize_befores[s] = s.to_dict()
@@ -373,26 +383,45 @@ func _anchor_for_edge(sr: Rect2, edge: int) -> Vector2:
 			return Vector2(sr.end.x, sr.position.y + sr.size.y * 0.5)
 
 
-func _new_resize_rect(world: Vector2) -> Rect2:
-	var sr := _resize_start_rect
+func _edge_moves_x(edge: int) -> bool:
+	return edge in [0, 2, 3, 4, 6, 7]
+
+
+func _edge_moves_y(edge: int) -> bool:
+	return edge in [0, 1, 2, 4, 5, 6]
+
+
+func _clamp_axis(v: float, a: float, c0: float, span: float) -> float:
+	var dir := signf(c0 - a)
+	return a + dir * clampf(absf(v - a), span * RESIZE_MIN_RATIO, span * RESIZE_MAX_RATIO)
+
+
+func _clamped_corner(world: Vector2) -> Vector2:
 	var a := _resize_anchor
-	match _resize_edge:
-		0, 2, 4, 6:
-			var tl := Vector2(minf(a.x, world.x), minf(a.y, world.y))
-			var br := Vector2(maxf(a.x, world.x), maxf(a.y, world.y))
-			return Rect2(tl, (br - tl).max(Vector2(1, 1)))
-		1:
-			var top := minf(world.y, a.y - 1.0)
-			return Rect2(sr.position.x, top, sr.size.x, a.y - top)
-		5:
-			var bottom := maxf(world.y, a.y + 1.0)
-			return Rect2(sr.position.x, sr.position.y, sr.size.x, bottom - sr.position.y)
-		3:
-			var right := maxf(world.x, a.x + 1.0)
-			return Rect2(sr.position.x, sr.position.y, right - sr.position.x, sr.size.y)
-		_:
-			var left := minf(world.x, a.x - 1.0)
-			return Rect2(left, sr.position.y, a.x - left, sr.size.y)
+	var c0 := _resize_corner0
+	var corner := world
+	if _edge_moves_x(_resize_edge):
+		corner.x = _clamp_axis(world.x, a.x, c0.x, _resize_start_rect.size.x)
+	else:
+		corner.x = c0.x
+	if _edge_moves_y(_resize_edge):
+		corner.y = _clamp_axis(world.y, a.y, c0.y, _resize_start_rect.size.y)
+	else:
+		corner.y = c0.y
+	return corner
+
+
+func _new_resize_rect(world: Vector2) -> Rect2:
+	var a := _resize_anchor
+	var c := _clamped_corner(world)
+	var r := Rect2(minf(a.x, c.x), minf(a.y, c.y), absf(c.x - a.x), absf(c.y - a.y))
+	if not _edge_moves_x(_resize_edge):
+		r.position.x = _resize_start_rect.position.x
+		r.size.x = _resize_start_rect.size.x
+	if not _edge_moves_y(_resize_edge):
+		r.position.y = _resize_start_rect.position.y
+		r.size.y = _resize_start_rect.size.y
+	return r
 
 
 func _apply_resize(world: Vector2) -> void:
@@ -400,11 +429,9 @@ func _apply_resize(world: Vector2) -> void:
 		return
 	var new_rect := _new_resize_rect(world)
 	var ratio := Vector2(
-		new_rect.size.x / _resize_start_rect.size.x,
-		new_rect.size.y / _resize_start_rect.size.y
+		clampf(new_rect.size.x / _resize_start_rect.size.x, RESIZE_MIN_RATIO, RESIZE_MAX_RATIO),
+		clampf(new_rect.size.y / _resize_start_rect.size.y, RESIZE_MIN_RATIO, RESIZE_MAX_RATIO)
 	)
-	ratio.x = maxf(ratio.x, 0.01)
-	ratio.y = maxf(ratio.y, 0.01)
 	if absf(ratio.x - 1.0) < 0.001 and absf(ratio.y - 1.0) < 0.001:
 		return
 	for s in _selected:

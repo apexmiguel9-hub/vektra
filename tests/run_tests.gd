@@ -51,6 +51,7 @@ func _init() -> void:
 	_test_history_move_line()
 	_test_resize_rect()
 	_test_resize_undo()
+	_test_resize_no_mirror()
 	_test_min_selrect()
 	print("=== RESULTADO: %d passed, %d failed ===" % [_passed, _failed])
 	quit(0 if _failed == 0 else 1)
@@ -502,6 +503,25 @@ func _test_resize_undo() -> void:
 	_check("resize undo restores", _vec2_approx(r.position, Vector2(100, 100)) and _vec2_approx(r.size, Vector2(60, 60)))
 	hist.redo()
 	_check("resize redo reapplies", _vec2_approx(r.position, Vector2(115, 115)) and _vec2_approx(r.size, Vector2(30, 30)))
+
+
+func _test_resize_no_mirror() -> void:
+	var cv := CanvasView.new()
+	cv._zoom = 1.0
+	var r := ShapeFactory.rect(Vector2(100, 100), 60, 60)
+	cv._selected.append(r)
+	cv._begin_resize(0)
+	cv._apply_resize(Vector2(-500, -500))
+	var sr := r.get_selrect()
+	var ratio_x := sr.size.x / 60.0
+	var ratio_y := sr.size.y / 60.0
+	_check("resize never mirrors x", ratio_x >= 0.02 and ratio_x <= 200.0)
+	_check("resize never mirrors y", ratio_y >= 0.02 and ratio_y <= 200.0)
+	cv._begin_resize(0)
+	cv._apply_resize(Vector2(1000, 1000))
+	sr = r.get_selrect()
+	_check("resize caps huge stretch", sr.size.x / 60.0 <= 200.01 and sr.size.y / 60.0 <= 200.01)
+	cv.free()
 
 
 func _test_min_selrect() -> void:
